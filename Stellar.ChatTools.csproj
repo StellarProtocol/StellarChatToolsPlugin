@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>CS8632;CS8765</NoWarn>
+    <RootNamespace>Stellar.ChatTools</RootNamespace>
+    <AssemblyName>Stellar.ChatTools</AssemblyName>
+    <Version>1.1.0</Version>
+    <Deterministic>true</Deterministic>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Stellar.Abstractions" Version="1.1.1" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="1.1.1" />
+  </ItemGroup>
+</Project>
