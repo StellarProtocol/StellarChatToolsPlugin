@@ -75,7 +75,7 @@ public sealed class Plugin : IStellarPlugin
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
-                    ShouldRender = () => _services.ClientState.Phase == GamePhase.World,
+                    ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
                     Closable = true,
                     Draggable = true
                 },
