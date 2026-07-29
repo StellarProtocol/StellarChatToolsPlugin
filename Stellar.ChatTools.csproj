@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
+
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -16,4 +18,18 @@
     <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
     <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
   </ItemGroup>
+
+  <!-- Post-build: copy DLL to local plugins/ and (if GameInstallDir is set) to game dir -->
+  <PropertyGroup>
+    <PluginDeployDir>$(MSBuildThisFileDirectory)plugins\chattools\</PluginDeployDir>
+    <GamePluginDir Condition="'$(GameInstallDir)' != ''">$(GameInstallDir)\stellar\plugins\chattools\</GamePluginDir>
+  </PropertyGroup>
+
+  <Target Name="DeployPlugin" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(PluginDeployDir)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(GamePluginDir)"
+          Condition="'$(GamePluginDir)' != ''" />
+    <Warning Text="Local.props not found — skipping game deploy. Copy Local.props.example to Local.props and set GameInstallDir."
+             Condition="'$(GamePluginDir)' == ''" />
+  </Target>
 </Project>
