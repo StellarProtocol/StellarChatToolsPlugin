@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Path to your local game_mini folder. Copy this file to Local.props and fill in your path. -->
+    <GameInstallDir>C:\path\to\game_mini</GameInstallDir>
+  </PropertyGroup>
+</Project>

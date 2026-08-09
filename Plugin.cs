@@ -74,7 +74,11 @@ public sealed class Plugin : IStellarPlugin
                     DefaultRect: new WindowRect(21f, 596f, 480f, 0f),
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
-                { HideUntilInWorld = true, Closable = true, Draggable = true },
+                {
+                    ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
+                    Closable = true,
+                    Draggable = true
+                },
                 BuildRoot(),
                 OnClose: () => _window!.SetVisible(false)),
             new HotkeyAction(
