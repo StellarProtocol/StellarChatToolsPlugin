@@ -2,5 +2,12 @@
   <PropertyGroup>
     <!-- Path to your local game_mini folder. Copy this file to Local.props and fill in your path. -->
     <GameInstallDir>C:\path\to\game_mini</GameInstallDir>
+    <PluginDeployDir>$(MSBuildThisFileDirectory)plugins\chattools\</PluginDeployDir>
+    <GamePluginDir>$(GameInstallDir)\stellar\plugins\chattools\</GamePluginDir>
   </PropertyGroup>
+
+  <Target Name="DeployPlugin" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(PluginDeployDir)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(GamePluginDir)" />
+  </Target>
 </Project>
