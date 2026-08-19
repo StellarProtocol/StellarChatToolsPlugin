@@ -22,6 +22,7 @@ public sealed class Plugin : IStellarPlugin
     private const int MaxMessages = 60;   // log rows built; the newest MaxMessages are shown
 
     private readonly IPluginServices _services;
+    private readonly ILocalization _loc;
     private readonly IChat _chat;
     private readonly IWindowControl _window;
 
@@ -34,7 +35,7 @@ public sealed class Plugin : IStellarPlugin
     private string _inputText = string.Empty;
     private int _selectedChannelIndex;   // 0=Say, 1=World, 2=Party, 3=Guild
 
-    private static readonly string[] ChannelLabels = { "Say", "World", "Party", "Guild" };
+    private static readonly string[] ChannelKeys = { "chat.channel.say", "chat.channel.world", "chat.channel.party", "chat.channel.guild" };
     private static readonly ChatTarget[] ChannelTargets = { ChatTarget.Say, ChatTarget.World, ChatTarget.Party, ChatTarget.Guild };
 
     // auto-reply state
@@ -47,18 +48,19 @@ public sealed class Plugin : IStellarPlugin
     public Plugin(IPluginServices services)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
+        _loc = services.Localization;
         _chat = services.Chat;
         services.Log.Info("[ChatTools] plugin constructed");
 
         var registry = _services.Theme.ColorRegistry;
-        _partySlot = registry.Register("ChatTools.Channel.Party", "Party text", new Dictionary<ThemePreset, ColorRgba>
+        _partySlot = registry.Register("ChatTools.Channel.Party", _loc.T("chat.color.party"), new Dictionary<ThemePreset, ColorRgba>
         {
             [ThemePreset.Default] = new ColorRgba(0.40f, 0.85f, 1.00f),
             [ThemePreset.Dark]    = new ColorRgba(0.40f, 0.85f, 1.00f),
             [ThemePreset.Crimson] = new ColorRgba(0.40f, 0.85f, 1.00f),
             [ThemePreset.Light]   = new ColorRgba(0.07f, 0.42f, 0.66f),
         });
-        _whisperSlot = registry.Register("ChatTools.Channel.Whisper", "Whisper text", new Dictionary<ThemePreset, ColorRgba>
+        _whisperSlot = registry.Register("ChatTools.Channel.Whisper", _loc.T("chat.color.whisper"), new Dictionary<ThemePreset, ColorRgba>
         {
             [ThemePreset.Default] = new ColorRgba(0.85f, 0.50f, 1.00f),
             [ThemePreset.Dark]    = new ColorRgba(0.85f, 0.50f, 1.00f),
@@ -83,7 +85,7 @@ public sealed class Plugin : IStellarPlugin
                 OnClose: () => _window!.SetVisible(false)),
             new HotkeyAction(
                 Id:              "chattools.toggle",
-                Description:     "Toggle ChatTools window",
+                Description:     _loc.T("chat.hotkey.toggle"),
                 SuggestedDefault: new KeyBinding(StellarKeyCode.F12)),
             _services.Hotkeys);
     }
@@ -107,14 +109,14 @@ public sealed class Plugin : IStellarPlugin
         for (int i = 0; i < MaxMessages; i++) { var idx = i; slots[i] = BuildMessageRow(idx); }
 
         var channelButtons = new List<HudElement>();
-        for (int i = 0; i < ChannelLabels.Length; i++)
+        for (int i = 0; i < ChannelKeys.Length; i++)
         {
             var idx = i;
-            channelButtons.Add(new ButtonElement(() => ChannelLabels[idx], () => _selectedChannelIndex = idx,
+            channelButtons.Add(new ButtonElement(() => _loc.T(ChannelKeys[idx]), () => _selectedChannelIndex = idx,
                 Active: () => _selectedChannelIndex == idx));
         }
         channelButtons.Add(new InputElement(() => _inputText, s => { _inputText = s; DoSend(); }, 240f, OnChange: s => _inputText = s));
-        channelButtons.Add(new ButtonElement(() => "Send", DoSend));
+        channelButtons.Add(new ButtonElement(() => _loc.T("chat.send"), DoSend));
 
         return new ColumnElement(new HudElement[]
         {
@@ -124,16 +126,16 @@ public sealed class Plugin : IStellarPlugin
             new RowElement(new HudElement[]
             {
                 new ToggleElement(() => "", () => _autoReplyEnabled, SetAutoReply),
-                new TextElement(() => "Auto-reply to whispers"),
+                new TextElement(() => _loc.T("chat.autoReply.label")),
             }, Gap: 6f),
             new ConditionalElement(() => _autoReplyEnabled, new ColumnElement(new HudElement[]
             {
                 new RowElement(new HudElement[]
                 {
-                    new TextElement(() => "Reply:", Width: 56f),
+                    new TextElement(() => _loc.T("chat.reply"), Width: 56f),
                     new InputElement(() => _autoReplyText, s => _autoReplyText = s, 320f, OnChange: s => _autoReplyText = s),
                 }, Gap: 4f),
-                new TextElement(() => $"Cooldown: {AutoReplyCooldown.TotalSeconds:0}s per sender", () => _services.Theme.Colors.TextMuted),
+                new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.TextMuted),
             }, Gap: 4f)),
         });
     }
@@ -222,14 +224,14 @@ public sealed class Plugin : IStellarPlugin
         _chat.Send(ChatTarget.Reply(msg), _autoReplyText);
     }
 
-    private static string PrefixFor(ChatChannel ch) => ch switch
+    private string PrefixFor(ChatChannel ch) => ch switch
     {
-        ChatChannel.Say     => "[Say]",
-        ChatChannel.World   => "[World]",
-        ChatChannel.Party   => "[Party]",
-        ChatChannel.Guild   => "[Guild]",
-        ChatChannel.Whisper => "[Whisp]",
-        ChatChannel.System  => "[Sys]",
-        _                   => "[??]",
+        ChatChannel.Say     => _loc.T("chat.prefix.say"),
+        ChatChannel.World   => _loc.T("chat.prefix.world"),
+        ChatChannel.Party   => _loc.T("chat.prefix.party"),
+        ChatChannel.Guild   => _loc.T("chat.prefix.guild"),
+        ChatChannel.Whisper => _loc.T("chat.prefix.whisper"),
+        ChatChannel.System  => _loc.T("chat.prefix.sys"),
+        _                   => _loc.T("chat.prefix.unknown"),
     };
 }

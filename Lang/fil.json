@@ -1,0 +1,20 @@
+{
+  "chat.autoReply.label": "Awtomatikong sagot sa mga bulong",
+  "chat.channel.guild": "Guild",
+  "chat.channel.party": "Party",
+  "chat.channel.say": "Sabihin",
+  "chat.channel.world": "Mundo",
+  "chat.color.party": "Teksto ng Party",
+  "chat.color.whisper": "Teksto ng bulong",
+  "chat.cooldown": "Cooldown: {0:0}s bawat nagpadala",
+  "chat.hotkey.toggle": "I-toggle ang bintana ng ChatTools",
+  "chat.prefix.guild": "[Guild]",
+  "chat.prefix.party": "[Party]",
+  "chat.prefix.say": "[Sabihin]",
+  "chat.prefix.sys": "[Sistema]",
+  "chat.prefix.unknown": "[??]",
+  "chat.prefix.whisper": "[Bulong]",
+  "chat.prefix.world": "[Mundo]",
+  "chat.reply": "Sagot:",
+  "chat.send": "Ipadala"
+}

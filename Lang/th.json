@@ -1,0 +1,20 @@
+{
+  "chat.autoReply.label": "ตอบกลับกระซิบอัตโนมัติ",
+  "chat.channel.guild": "กิลด์",
+  "chat.channel.party": "ปาร์ตี้",
+  "chat.channel.say": "รอบตัว",
+  "chat.channel.world": "โลก",
+  "chat.color.party": "สีข้อความปาร์ตี้",
+  "chat.color.whisper": "สีข้อความกระซิบ",
+  "chat.cooldown": "คูลดาวน์: {0:0} วินาทีต่อผู้ส่ง",
+  "chat.hotkey.toggle": "สลับหน้าต่าง ChatTools",
+  "chat.prefix.guild": "[กิลด์]",
+  "chat.prefix.party": "[ปาร์ตี้]",
+  "chat.prefix.say": "[รอบตัว]",
+  "chat.prefix.sys": "[ระบบ]",
+  "chat.prefix.unknown": "[??]",
+  "chat.prefix.whisper": "[กระซิบ]",
+  "chat.prefix.world": "[โลก]",
+  "chat.reply": "ตอบกลับ:",
+  "chat.send": "ส่ง"
+}

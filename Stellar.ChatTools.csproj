@@ -9,13 +9,22 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.ChatTools</RootNamespace>
     <AssemblyName>Stellar.ChatTools</AssemblyName>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Stellar.Abstractions"       Version="2.0.0" />
+    <!-- i18n P2: consumes IPluginServices.Localization (ILocalization), framework 2.1.0. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.1.0" />
     <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
     <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- i18n catalogs: auto-discovered by the framework via the Lang.<code>.json suffix. -->
+    <EmbeddedResource Include="Lang/en.json" LogicalName="Stellar.ChatTools.Lang.en.json" />
+    <EmbeddedResource Include="Lang/ja.json" LogicalName="Stellar.ChatTools.Lang.ja.json" />
+    <EmbeddedResource Include="Lang/th.json" LogicalName="Stellar.ChatTools.Lang.th.json" />
+    <EmbeddedResource Include="Lang/id.json" LogicalName="Stellar.ChatTools.Lang.id.json" />
+    <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.ChatTools.Lang.fil.json" />
   </ItemGroup>
 </Project>
