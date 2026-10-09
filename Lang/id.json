@@ -16,5 +16,6 @@
   "chat.prefix.whisper": "[Bisik]",
   "chat.prefix.world": "[Dunia]",
   "chat.reply": "Balas:",
-  "chat.send": "Kirim"
+  "chat.send": "Kirim",
+  "chat.window.title": "ChatTools"
 }

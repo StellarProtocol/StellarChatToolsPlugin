@@ -1,0 +1,21 @@
+{
+  "chat.autoReply.label": "귓속말 자동 응답",
+  "chat.channel.guild": "길드",
+  "chat.channel.party": "파티",
+  "chat.channel.say": "주변",
+  "chat.channel.world": "월드",
+  "chat.color.party": "파티 텍스트",
+  "chat.color.whisper": "귓속말 텍스트",
+  "chat.cooldown": "쿨타임: 발신자당 {0:0}초",
+  "chat.hotkey.toggle": "채팅 도구 창 전환",
+  "chat.prefix.guild": "[길드]",
+  "chat.prefix.party": "[파티]",
+  "chat.prefix.say": "[주변]",
+  "chat.prefix.sys": "[시스템]",
+  "chat.prefix.unknown": "[??]",
+  "chat.prefix.whisper": "[귓속말]",
+  "chat.prefix.world": "[월드]",
+  "chat.reply": "응답:",
+  "chat.send": "보내기",
+  "chat.window.title": "채팅 도구"
+}

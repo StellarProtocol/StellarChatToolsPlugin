@@ -16,5 +16,6 @@
   "chat.prefix.whisper": "[Whisp]",
   "chat.prefix.world": "[World]",
   "chat.reply": "Reply:",
-  "chat.send": "Send"
+  "chat.send": "Send",
+  "chat.window.title": "ChatTools"
 }
