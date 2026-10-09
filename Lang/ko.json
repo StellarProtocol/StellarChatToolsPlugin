@@ -16,5 +16,6 @@
   "chat.prefix.whisper": "[귓속말]",
   "chat.prefix.world": "[월드]",
   "chat.reply": "응답:",
-  "chat.send": "보내기"
+  "chat.send": "보내기",
+  "chat.window.title": "채팅 도구"
 }

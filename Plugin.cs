@@ -72,7 +72,7 @@ public sealed class Plugin : IStellarPlugin
             new WindowRegistration(
                 new WindowSpec(
                     Id:          "chattools.main",
-                    Title:       "ChatTools",
+                    Title:       _loc.T("chat.window.title"),
                     DefaultRect: new WindowRect(21f, 596f, 480f, 0f),
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)

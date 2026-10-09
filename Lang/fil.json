@@ -16,5 +16,6 @@
   "chat.prefix.whisper": "[Bulong]",
   "chat.prefix.world": "[Mundo]",
   "chat.reply": "Sagot:",
-  "chat.send": "Ipadala"
+  "chat.send": "Ipadala",
+  "chat.window.title": "ChatTools"
 }

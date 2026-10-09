@@ -16,5 +16,6 @@
   "chat.prefix.whisper": "[กระซิบ]",
   "chat.prefix.world": "[โลก]",
   "chat.reply": "ตอบกลับ:",
-  "chat.send": "ส่ง"
+  "chat.send": "ส่ง",
+  "chat.window.title": "ChatTools"
 }
