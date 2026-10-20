@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
-
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -28,4 +26,8 @@
     <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.ChatTools.Lang.fil.json" />
     <EmbeddedResource Include="Lang/ko.json" LogicalName="Stellar.ChatTools.Lang.ko.json" />
   </ItemGroup>
+  <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
+       reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences
+       so a `PackageReference Remove` in Local.props can take effect (mirrors the RaidManager convention). -->
+  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
 </Project>

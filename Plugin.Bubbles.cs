@@ -7,26 +7,36 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// Bubble-style message rows (the game-native chat look, compacted). Each log slot is a
 /// <see cref="ConditionalElement"/> that picks a LEFT (others) or RIGHT (self) layout per message:
-/// a small rounded avatar chip, a rounded "speech bubble" (a forced-selected <see cref="SelectableElement"/>
-/// whose SwatchBg chip is the only rounded, tintable container the SDK exposes), and a muted timestamp on
-/// the opposite side. Self-detection is layered: the party roster's <c>IsSelf</c> member when available, and
-/// a send round-trip fallback that learns the local name/charId from our own echoed messages.
+/// a small rounded avatar chip, a content-hugging <see cref="BubbleElement"/> (the framework's rounded chat
+/// bubble — width hugs its child so a short message makes a narrow bubble and a long one wraps at the cap),
+/// and a muted timestamp on the opposite side. Self-detection is layered: the party roster's <c>IsSelf</c>
+/// member when available, and a send round-trip fallback that learns the local name/charId from our own
+/// echoed messages.
 ///
-/// Fidelity notes (what existing elements could NOT reach, for the escalation report):
-///  • The bubble background is the accent-tinted SwatchBg chip (≈0.28α cyan wash), NOT the game's opaque
-///    near-white bubble — the renderer hard-codes that tint and exposes no plugin-set fill colour on a
-///    rounded, child-hosting container. A new element (a rounded panel with a plugin colour + child host)
-///    would close this.
-///  • Avatars are colour-coded chips (hue hashed from the sender name), NOT class/role icons: the chat wire
-///    carries no profession — <c>SenderMeta.Job</c> is hard-coded null at every framework construction site
-///    (WireProtocol.ChitChat.cs:98,137; PandaChatProbe.Receive.Chat.cs), so there is nothing to map.
+/// Why a <see cref="BubbleElement"/> and not the old forced-<see cref="SelectableElement"/> chip: the chip
+/// force-expanded to the full row width (a baggy bubble far wider than its text). The bubble HUGS inside a
+/// <see cref="RowElement"/> (a Row's HLG respects child width), with a flexible <see cref="SpacerElement"/>
+/// as the gutter pushing the row to one side. An explicit <see cref="BubbleElement.MaxWidth"/> is REQUIRED —
+/// a content-sized/right-justified Row has no definite "available width", so MaxWidth 0 would never wrap.
+/// <see cref="BubbleElement.FillColor"/> is left null = the themed menu-accent @0.28α — the SAME tint the old
+/// forced-Selected chip painted (the user already approved it). FillColor is the single knob to change later.
+/// The bubble is purely visual (no click): whisper reply is reached by clicking the sender NAME (see
+/// <see cref="BuildSenderName"/>), NOT by wrapping the bubble in a SelectableElement (which would repaint a
+/// full-width chip behind the hugged bubble — the exact baggy look we removed).
+///
+/// Fidelity note: avatars are colour-coded chips (hue hashed from the sender name), NOT class/role icons —
+/// the chat wire carries no profession (<c>SenderMeta.Job</c> is hard-coded null at every framework
+/// construction site: WireProtocol.ChitChat.cs; PandaChatProbe.Receive.Chat.cs), so there is nothing to map.
 /// </summary>
 public sealed partial class Plugin
 {
-    private const float AvatarSize   = 20f;   // compact — well under the game's big portraits
-    private const float TimeColWidth = 46f;
-    private const float BubbleWeight  = 2f;    // bubble : gutter = 2 : 1 → bubble ~66% of the free row width
-    private const float GutterWeight  = 1f;
+    private const float AvatarSize     = 20f;    // compact — well under the game's big portraits
+    private const float TimeColWidth   = 46f;
+    // Hard width cap on a bubble (canvas px). Short messages hug; past the cap a long message wraps and the
+    // bubble grows in height. Static like the game's chat (it does NOT track the window width — a Row offers
+    // no "available width" to clamp to). Sized to fit the default 440px window; this is the single tuning knob
+    // for the wrap width. (Shrinking the window to its 360px minimum can clip a long bubble — tune here.)
+    private const float BubbleMaxWidth = 300f;
 
     // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages.
     private long _selfCharId;
@@ -57,31 +67,45 @@ public sealed partial class Plugin
     {
         var avatar = new SwatchElement(() => self ? SelfAvatarColor : AvatarColor(i), AvatarSize);
 
-        // Bubble body: name line ([name] + muted level badge) over the wrapping message text. The whole chip
-        // is clickable so a whisper row still opens a reply (OnRowClick no-ops on non-whisper rows). Forced
-        // Selected so the rounded SwatchBg chip is actually painted (its rest state is fully transparent).
-        var bubble = new CellElement(new SelectableElement(
-            new ColumnElement(new HudElement[]
+        // Bubble body: the sender/Lv line over the wrapping message text, in a content-hugging BubbleElement.
+        // The bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and
+        // defeat the hug). MaxWidth caps a long message so it wraps; FillColor stays null = themed accent tint.
+        var bubble = new BubbleElement(new ColumnElement(new HudElement[]
+        {
+            new RowElement(new HudElement[]
             {
-                new RowElement(new HudElement[]
-                {
-                    new TextElement(() => LogSenderName(i), () => LogSenderColor(i), Emphasis: true, NoWrap: true),
-                    new TextElement(() => LogLevelBadge(i), MutedCol, NoWrap: true),
-                }, Gap: 4f),
-                new TextElement(() => LogText(i), () => LogMsgColor(i)),
-            }, Gap: 1f),
-            OnClick: () => OnRowClick(i),
-            Selected: () => true), Weight: BubbleWeight);
+                BuildSenderName(i, self),
+                new TextElement(() => LogLevelBadge(i), MutedCol, NoWrap: true),
+            }, Gap: 4f),
+            new TextElement(() => LogText(i), () => LogMsgColor(i)),
+        }, Gap: 1f))
+        { MaxWidth = BubbleMaxWidth };
 
         var time   = new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true), Width: TimeColWidth);
-        var gutter = new CellElement(new TextElement(() => string.Empty), Weight: GutterWeight);
+        var gutter = new SpacerElement();   // flexible — soaks the row slack so the bubble hugs and the row packs
 
-        // Others: avatar · bubble · time · (gutter pushes them left). Self mirrors it to the right.
+        // Others: avatar · bubble · time · (flex gutter → packs left). Self mirrors it, gutter first → packs right.
         var children = self
             ? new HudElement[] { gutter, time, bubble, avatar }
             : new HudElement[] { avatar, bubble, time, gutter };
-        return new RowElement(children, Gap: 5f, Justify: self ? RowJustify.Right : RowJustify.Left);
+        return new RowElement(children, Gap: 5f);
     }
+
+    // The sender name. Only an INBOUND (other) whisper is repliable, so for those the name is rendered as a
+    // low-emphasis ButtonElement whose click opens a reply to that whisperer — it HUGS its label, so it never
+    // paints a full-width chip behind the bubble (the whole point of dropping the Selectable-as-bubble). Every
+    // other row keeps the name as plain per-channel-coloured text: a ButtonElement can't carry a custom label
+    // colour, and non-whispers aren't repliable, so there's no reason to button them (and the colour is kept).
+    private HudElement BuildSenderName(int i, bool self)
+    {
+        HudElement plain = new TextElement(() => LogSenderName(i), () => LogSenderColor(i), Emphasis: true, NoWrap: true);
+        if (self) return plain;   // our own echoed whisper isn't a reply target
+        return new ConditionalElement(() => IsWhisperRow(i),
+            new ButtonElement(() => LogSenderName(i), () => OnRowClick(i), Style: MenuButtonStyle.Glass),
+            plain);
+    }
+
+    private bool IsWhisperRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper && m.SenderId != 0;
 
     // Deterministic palette pick from the sender name (FNV-ish fold; empty name → slot 0).
     private ColorRgba AvatarColor(int slot)
