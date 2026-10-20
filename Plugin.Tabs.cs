@@ -94,6 +94,15 @@ public sealed partial class Plugin
     // closest — see the escalation report (a per-tab underline would need a new framework element).
     private static readonly ColorRgba TabAccent = new(0.30f, 0.82f, 1f, 0.95f);
 
+    // Uniform tab width (canvas px) so the strip reads as an even segmented bar, not a row of label-sized chips.
+    // Sized to fit the WIDEST label — "Whisper"/"Current" (and a "World ▾" caret) PLUS the " •" unread suffix —
+    // inside the button's fixed-width box: a ButtonElement's content area is Width minus 18px of HLG padding (9px
+    // each side) at the 11px menu font, and an over-long label WRAPS to a 2nd line (it does not clip), so the width
+    // leaves a few px of slack to keep every tab one line tall. NB: 7 tabs × this width (≈516px incl. 2px gaps)
+    // exceeds the 440px default window, so the strip overflows a narrow window rather than shrinking a tab below its
+    // label — the user runs the window wide. The active-tab cyan accent and unread dots are width-independent.
+    private const float TabWidth = 72f;
+
     // The tab strip: All · World · Current · Party · Guild · Whisper · System, over the cyan accent line.
     // Active tab highlighted (ButtonElement.Active → accent fill); a trailing bullet marks unread. Labels +
     // the dot resolve at draw time, so a live language switch and live unread state both show without a rebuild.
@@ -106,7 +115,8 @@ public sealed partial class Plugin
             buttons.Add(new ButtonElement(
                 () => HasUnread(tab) ? _loc.T(TabLabelKey(tab)) + " •" : _loc.T(TabLabelKey(tab)),
                 () => SetActiveTab(tab),
-                Active: () => _activeTab == tab));
+                Active: () => _activeTab == tab,
+                Width: TabWidth));
         }
         return new ColumnElement(new HudElement[]
         {

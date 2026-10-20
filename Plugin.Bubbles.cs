@@ -37,6 +37,11 @@ public sealed partial class Plugin
     // no "available width" to clamp to). Sized to fit the default 440px window; this is the single tuning knob
     // for the wrap width. (Shrinking the window to its 360px minimum can clip a long bubble — tune here.)
     private const float BubbleMaxWidth = 300f;
+    // Vertical breathing room below each bubble row (canvas px), matching the game's spaced-out chat. The variable
+    // VirtualListElement stacks rows at their MEASURED preferred heights and has no built-in row gap, so the gap is
+    // folded into each row's measured height as a trailing SpacerElement (see BuildBubbleSlot) rather than a
+    // framework RowGap (which would need a framework redeploy).
+    private const float BubbleRowGap = 6f;
 
     // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages.
     private long _selfCharId;
@@ -64,7 +69,17 @@ public sealed partial class Plugin
     // reads the live LogMsgIndex = _windowFirst + i), so a recycled slot flips alignment to match whatever message
     // it now shows (ConditionalElement defers branch construction until first shown — WindowBuilder.Layout.cs).
     private HudElement BuildBubbleSlot(int i)
-        => new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false));
+        // Wrap the per-row ConditionalElement in a width-expanding ColumnElement with a trailing fixed-height
+        // SpacerElement. That bottom gap is MEASURED into the slot's preferred height (the variable list reads
+        // LayoutUtility.GetPreferredHeight on the slot), so it renders as ~BubbleRowGap px of space between
+        // consecutive rows. The bubble still HUGS — it lives in the inner RowElement (BuildBubbleRow), NOT as a
+        // direct child of this Column (which force-expands child width). Applied once here so it covers BOTH the
+        // self and other branches identically.
+        => new ColumnElement(new HudElement[]
+        {
+            new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false)),
+            new SpacerElement(Height: BubbleRowGap),
+        });
 
     private HudElement BuildBubbleRow(int i, bool self)
     {
