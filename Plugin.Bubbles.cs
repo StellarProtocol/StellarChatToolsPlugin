@@ -32,7 +32,9 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    private const float AvatarSize     = 20f;    // compact — well under the game's big portraits
+    private const float AvatarSize     = 40f;    // ≈ the bubble's name + one-line-text height (fixed px — eyeball-tuned)
+    private const float AvatarCorner   = 8f;     // rounded-SQUARE mask (NOT AvatarSize/2, which is a full circle)
+    private const float RowGap         = 10f;    // horizontal spacing between row items — notably the avatar↔bubble gutter
     private const float TimeColWidth   = 46f;
     // Hard width cap on a bubble (canvas px). Short messages hug; past the cap a long message wraps and the
     // bubble grows in height. Static like the game's chat (it does NOT track the window width — a Row offers
@@ -76,10 +78,11 @@ public sealed partial class Plugin
 
     private HudElement BuildBubbleRow(int i, bool self)
     {
-        // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). Circular via a CornerRadius = half the
-        // size stencil mask. Everyone resolves to the shared default face until (and unless) their real photo loads.
+        // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). Rounded-SQUARE via a small CornerRadius
+        // stencil mask (AvatarCorner — NOT AvatarSize/2, which would round all the way to a full circle). Everyone
+        // resolves to the shared default face until (and unless) their real photo loads.
         var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
-            { CornerRadius = (int)(AvatarSize / 2f) };
+            { CornerRadius = (int)AvatarCorner };
 
         // Bubble body: the sender/Lv line over the wrapping message text, in a content-hugging BubbleElement.
         // The bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and
@@ -101,7 +104,7 @@ public sealed partial class Plugin
         var children = self
             ? new HudElement[] { gutter, time, bubble, avatar }
             : new HudElement[] { avatar, bubble, time, gutter };
-        return new RowElement(children, Gap: 5f);
+        return new RowElement(children, Gap: RowGap);
     }
 
     // The sender name. Only an INBOUND (other) whisper is repliable, so for those the name is rendered as a

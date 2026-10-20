@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -13,8 +12,10 @@ namespace Stellar.ChatTools;
 /// built to keep GC + GPU memory flat across a long session:
 ///   • <b>In-memory LRU</b> of decoded <see cref="Texture2D"/> keyed by charId, bounded (<see cref="AvatarLruCap"/>);
 ///     the evicted texture is <see cref="UnityEngine.Object.Destroy(UnityEngine.Object)"/>'d to free GPU memory.
-///   • <b>Disk cache</b> (persistent, survives relogs/offline): <c>&lt;pluginFolder&gt;/avatarcache/&lt;charId&gt;.png</c>.
-///     A person's photo is downloaded once, then always re-read from disk.
+///   • <b>Persistent store</b> (survives relogs/offline): the framework per-plugin data store, rooted at
+///     <c>stellar/plugindata/stellar.chattools.data/avatar/&lt;charId&gt;.png</c> — NOT the plugin's own folder, so the
+///     files aren't swept by <c>PluginHost</c>'s recursive DLL scan. A person's photo is downloaded once, then
+///     always re-read from the store.
 ///   • <b>Negative cache</b> + <b>in-flight guard</b>: a charId the RPC reports as having no custom photo never
 ///     re-RPCs (resolves to the shared default face); a charId currently resolving never issues a second request.
 ///
@@ -24,7 +25,7 @@ namespace Stellar.ChatTools;
 /// Threading: all cache state (LRU / negative / in-flight / default) is touched ONLY on the Unity main thread —
 /// <see cref="AvatarTextureFor"/> runs in the render poll, <see cref="IPlayerProfile"/>'s callback fires on the main
 /// thread, and the download's completion hops back via <c>IFramework.Post</c>. The only off-thread work is the
-/// HTTP GET + the disk WRITE (both pure, touching no shared collection), so no locking is needed. Every Unity / IO /
+/// HTTP GET + the store WRITE (both pure, touching no shared collection), so no locking is needed. Every Unity / IO /
 /// network call is wrapped in try/catch — a failed avatar must only fall back to the default, never throw into the
 /// window render path.
 /// </summary>
@@ -58,13 +59,11 @@ public sealed partial class Plugin
     private Texture2D? _defaultAvatar;   // shared default face (null until downloaded/decoded)
     private bool _defaultStarted;        // guard: kick the default download/decode exactly once
 
-    // Plugin-folder-relative disk cache. Pure string ops (no Unity) → safe to call from the download thread too.
-    private static string AvatarPluginDir =>
-        Path.GetDirectoryName(typeof(Plugin).Assembly.Location) is { Length: > 0 } d ? d : AppContext.BaseDirectory;
-    private static string AvatarCacheDir => Path.Combine(AvatarPluginDir, "avatarcache");
-    private static string AvatarDiskPath(long charId) =>
-        Path.Combine(AvatarCacheDir, charId.ToString(CultureInfo.InvariantCulture) + ".png");
-    private static string DefaultDiskPath() => Path.Combine(AvatarCacheDir, "_default.png");
+    // Data-store names (IPluginDataStore: one subdir + file, no rooted/backslash/.. parts). Pure string ops → safe
+    // to build from the download thread too. The store roots these under stellar/plugindata/stellar.chattools.data/.
+    private const string DefaultStoreName = "avatar/_default.png";
+    private static string AvatarStoreName(long charId) =>
+        "avatar/" + charId.ToString(CultureInfo.InvariantCulture) + ".png";
 
     // ---- Render entry point ---------------------------------------------------------------------------------
     // Cheap + non-blocking: called every frame per visible bubble row (the GameTextureElement poll Func). Returns a
@@ -94,14 +93,14 @@ public sealed partial class Plugin
             // 2/3. Terminal-no-photo, or a resolve already running → default placeholder (don't touch disk/RPC).
             if (_negative.Contains(charId) || _inFlight.Contains(charId)) return _defaultAvatar;
 
-            // 4. Disk cache. Decode on THIS (main) thread; files are tiny so the sync read is cheap.
-            var path = AvatarDiskPath(charId);
-            if (SafeFileExists(path))
+            // 4. Persistent store. Decode on THIS (main) thread; files are tiny so the sync read is cheap.
+            var name = AvatarStoreName(charId);
+            var bytes = _services.Data.Read(name);
+            if (bytes != null)
             {
-                byte[]? bytes = SafeReadAllBytes(path);
                 var tex = DecodePng(bytes);
                 if (tex != null) { LruInsert(charId, tex); return tex; }
-                SafeDeleteFile(path);   // corrupt on disk → delete so a fresh download can replace it, then re-resolve
+                _services.Data.Delete(name);   // corrupt in the store → drop so a fresh download can replace it, then re-resolve
             }
 
             // 5. Miss → kick the async resolve, show the default meanwhile.
@@ -160,7 +159,7 @@ public sealed partial class Plugin
                     FailAvatar(charId);
                     return;
                 }
-                TryWriteDisk(AvatarDiskPath(charId), bytes);   // persist for next session (bg thread)
+                _services.Data.Write(AvatarStoreName(charId), bytes);   // persist for next session (bg thread; store never throws)
                 _services.Framework.Post(() => FinishDecode(charId, bytes));   // Texture2D creation is main-thread-only
             }
             catch (Exception ex)
@@ -201,13 +200,13 @@ public sealed partial class Plugin
         if (_defaultStarted) return;
         _defaultStarted = true;
 
-        // Disk (we're on the main thread, so decode here directly).
+        // Store (we're on the main thread, so decode here directly).
         try
         {
-            var path = DefaultDiskPath();
-            if (SafeFileExists(path))
+            var bytes = _services.Data.Read(DefaultStoreName);
+            if (bytes != null)
             {
-                var tex = DecodePng(SafeReadAllBytes(path));
+                var tex = DecodePng(bytes);
                 if (tex != null) { _defaultAvatar = tex; return; }
             }
         }
@@ -223,10 +222,10 @@ public sealed partial class Plugin
                     _services.Log.Warning($"[ChatTools] default avatar: not a PNG or too large ({bytes?.Length ?? 0} bytes)");
                     return;
                 }
-                TryWriteDisk(DefaultDiskPath(), bytes);
+                _services.Data.Write(DefaultStoreName, bytes);   // persist for next session (bg thread; store never throws)
                 _services.Framework.Post(() =>
                 {
-                    if (_defaultAvatar != null) return;   // a disk read may have beaten us
+                    if (_defaultAvatar != null) return;   // a store read may have beaten us
                     var tex = DecodePng(bytes);
                     if (tex != null) _defaultAvatar = tex;
                 });
@@ -287,20 +286,6 @@ public sealed partial class Plugin
         b != null && b.Length >= 4 && b.Length < PngMaxBytes
         && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47;
 
-    private void TryWriteDisk(string path, byte[] bytes)
-    {
-        try
-        {
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllBytes(path, bytes);
-        }
-        catch (Exception ex) { _services.Log.Warning($"[ChatTools] avatar disk write failed ({path}): {ex.Message}"); }
-    }
-
-    private static bool SafeFileExists(string path) { try { return File.Exists(path); } catch { return false; } }
-    private static byte[]? SafeReadAllBytes(string path) { try { return File.ReadAllBytes(path); } catch { return null; } }
-    private static void SafeDeleteFile(string path) { try { File.Delete(path); } catch { } }
     private static void SafeDestroy(UnityEngine.Object? o) { try { if (o != null) UnityEngine.Object.Destroy(o); } catch { } }
 
     // Teardown (called from Plugin.Dispose): free every live texture — the LRU entries and the shared default.
