@@ -41,7 +41,7 @@ public sealed partial class Plugin
     // VirtualListElement stacks rows at their MEASURED preferred heights and has no built-in row gap, so the gap is
     // folded into each row's measured height as a trailing SpacerElement (see BuildBubbleSlot) rather than a
     // framework RowGap (which would need a framework redeploy).
-    private const float BubbleRowGap = 6f;
+    private const float BubbleRowGap = 3f;
 
     // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages.
     private long _selfCharId;
