@@ -58,8 +58,11 @@ public sealed partial class Plugin
     };
     private static readonly ColorRgba SelfAvatarColor = new(0.30f, 0.80f, 1f, 1f);
 
-    // One log slot: lazily builds the LEFT (others) or RIGHT (self) branch as messages of each kind pass
-    // through (ConditionalElement defers branch construction until first shown — WindowBuilder.Layout.cs).
+    // One RECYCLED pool slot (VirtualListElement reuses ~LogPoolSize of these across the whole log, repositioning +
+    // rebinding them as you scroll — NOT a fixed display position). It lazily builds the LEFT (others) or RIGHT
+    // (self) branch, and the ConditionalElement re-picks per the data row currently bound to the slot (IsSelfRow
+    // reads the live LogMsgIndex = _windowFirst + i), so a recycled slot flips alignment to match whatever message
+    // it now shows (ConditionalElement defers branch construction until first shown — WindowBuilder.Layout.cs).
     private HudElement BuildBubbleSlot(int i)
         => new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false));
 

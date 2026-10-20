@@ -83,6 +83,7 @@ public sealed partial class Plugin
 
     private void SetActiveTab(ChatTab tab)
     {
+        if (tab != _activeTab) _tabResetPending = true;   // .Log.cs — re-pin the log to bottom + re-measure heights (ResetScroll)
         _activeTab = tab;
         if (TabChannel(tab) is { } ch) _lastSeen[tab] = NewestFor(ch);   // opening a tab clears its unread
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel

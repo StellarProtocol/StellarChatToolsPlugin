@@ -26,7 +26,9 @@ public sealed partial class Plugin : IStellarPlugin
 {
     public string Name => "ChatTools";
 
-    // Log rows built; the newest N of the ACTIVE tab's filtered set are shown (filter first, then window).
+    // Initial capacity hint for the filtered-index list (_filtered); the framework RecentMessages ring is itself
+    // bounded. No longer a display cap: VirtualListElement windows the FULL filtered set and materializes only
+    // LogPoolSize (.Log.cs) recycled bubble GameObjects, so this does NOT bound live rows.
     private const int MaxLogRows = 200;
 
     private readonly IPluginServices _services;

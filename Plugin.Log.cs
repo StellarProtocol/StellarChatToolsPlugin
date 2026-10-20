@@ -6,10 +6,11 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// The rolling chat log: per-channel colour slots, the pre-built bubble slots, the active-tab filter, and the
-/// per-message accessors the bubble rows read. Slots use the fixed-slot + windowed-index pattern applied to
-/// the FILTERED list (filter first, then show the newest <see cref="MaxLogRows"/>). Bubble rendering (avatar,
-/// speech bubble, self/other alignment) lives in Plugin.Bubbles.cs; this file owns the data plumbing.
+/// The rolling chat log: per-channel colour slots, a recycled bubble POOL, the active-tab filter, and the
+/// per-message accessors the bubble rows read. Rows are a <see cref="VirtualListElement"/> (variable-height,
+/// stick-to-bottom) windowed over the FILTERED list — only ~viewport rows are materialized and recycled as you
+/// scroll (the framework owns scroll windowing), newest at the bottom. Bubble rendering (avatar, speech bubble,
+/// self/other alignment) lives in Plugin.Bubbles.cs; this file owns the data plumbing.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -18,6 +19,27 @@ public sealed partial class Plugin
     private readonly List<int> _filtered = new(MaxLogRows);
     private bool _logDirty = true;
     private ChatTab _lastFilterTab = (ChatTab)(-1);   // force first EnsureFiltered to build
+
+    // The virtual list OWNS windowing now: OnWindow pushes the first visible FILTERED row here each poll, and
+    // LogMsgIndex maps pool slot k -> filtered row _windowFirst + k. (Was a newest-MaxLogRows display window.)
+    private int _windowFirst;
+
+    // Recycled bubble pool size (K): ~viewport-worth of GameObjects, reused as you scroll (NOT display positions).
+    // Sized for the log viewport at the window's MAX height (MaxHeight 1100 - title/tabs/composer/gaps ≈ 960px)
+    // ÷ the ~28px shortest bubble ≈ 34 rows worst-case, + buffer for partial rows / scroll velocity. 50 sits
+    // safely above the "pool too small -> top of viewport blanks" caveat and matches the framework's ~50-GameObject
+    // target (vs the old eager 200). Shrink only if profiling shows it matters.
+    private const int LogPoolSize = 50;
+
+    // Edge-triggered one-shot for VirtualListElement.ResetScroll: SetActiveTab (.Tabs.cs) sets it on a tab change;
+    // consumed+cleared on the next poll so the new filter re-pins to the bottom and re-measures row heights.
+    private bool _tabResetPending;
+    private bool TakeTabResetPending()
+    {
+        if (!_tabResetPending) return false;
+        _tabResetPending = false;
+        return true;
+    }
 
     private void RegisterColors()
     {
@@ -43,11 +65,26 @@ public sealed partial class Plugin
 
     private HudElement BuildLogScroll()
     {
-        var slots = new HudElement[MaxLogRows];
-        for (int i = 0; i < MaxLogRows; i++) { var idx = i; slots[idx] = BuildBubbleSlot(idx); }   // .Bubbles.cs
-        // Height here is the PREFERRED (baseline) height; in a Resizable window the scroll's flexibleHeight=1
-        // lets it absorb the slack and grow with the window, so the log fills the freed vertical space.
-        return new ScrollElement(new ListElement(VisibleLogCount, slots), 200f);
+        var pool = new HudElement[LogPoolSize];
+        for (int i = 0; i < LogPoolSize; i++) { var k = i; pool[k] = BuildBubbleSlot(k); }   // .Bubbles.cs — recycled pool slots
+        // VirtualListElement materializes only ~LogPoolSize bubble GameObjects regardless of log length (the win over
+        // the old eager ListElement that pre-built 200). VariableHeight: bubbles wrap to different heights, so each
+        // slot is MEASURED; RowHeight 28 seeds the estimate for un-measured rows (the SHORTEST bubble height).
+        // StickToBottom: newest at the bottom, auto-follows when at the bottom, doesn't yank you when scrolled up.
+        // ResetScroll re-pins to bottom + forgets the measured-height model on a tab switch. The scroll host
+        // flex-grows (BuildScrollViewport sets flexibleHeight=1), so the log still fills a resized window exactly
+        // like the old ScrollElement; Height 200 is the viewport baseline.
+        return new VirtualListElement(
+            Count:     FilteredCount,
+            RowHeight: 28f,
+            Pool:      pool,
+            OnWindow:  first => _windowFirst = first,
+            Height:    200f)
+        {
+            VariableHeight = true,
+            StickToBottom  = true,
+            ResetScroll    = TakeTabResetPending,
+        };
     }
 
     private ColorRgba? MutedCol() => _services.Theme.Colors.MenuMuted;
@@ -67,20 +104,21 @@ public sealed partial class Plugin
         _logDirty = false;
     }
 
-    private int VisibleLogCount()
+    // Total logical rows the virtual list windows over = the active tab's filtered set (NO display cap — the Pool
+    // size, not this count, bounds live GameObjects now). Rebuilds the filtered view first if dirty.
+    private int FilteredCount()
     {
         EnsureFiltered();
-        return Math.Min(_filtered.Count, MaxLogRows);
+        return _filtered.Count;
     }
 
-    // Slot -> index into RecentMessages, showing the newest MaxLogRows of the filtered set (newest at bottom).
-    private int LogMsgIndex(int slot)
+    // Pool slot -> index into RecentMessages. The virtual list owns windowing (_windowFirst = first visible
+    // filtered row, pushed via OnWindow); pool slot k shows filtered row _windowFirst + k.
+    private int LogMsgIndex(int poolSlot)
     {
         EnsureFiltered();
-        int fc = _filtered.Count;
-        int shown = Math.Min(fc, MaxLogRows);
-        int fi = (fc - shown) + slot;
-        return (fi >= 0 && fi < fc) ? _filtered[fi] : -1;
+        int fi = _windowFirst + poolSlot;
+        return (fi >= 0 && fi < _filtered.Count) ? _filtered[fi] : -1;
     }
 
     private bool TryMsg(int slot, out ChatMessage msg)
