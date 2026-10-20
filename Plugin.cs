@@ -7,231 +7,101 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// In-game chat log, composer, and whisper auto-reply. Subscribes to <see cref="IChat"/> events,
-/// maintains a rolling log of the last <see cref="MaxMessages"/> messages, and lets the user type
-/// and send chat via the game's own dispatcher (<see cref="IChat.Send"/>) — no packet construction.
-/// Demonstrates a multi-section uGUI window (log + composer + whisper rule list) using ScrollElement
-/// and InputElement.
+/// In-game chat client: a rolling, channel-filtered log, a send composer with per-channel targets +
+/// quick phrases, whisper reply/auto-reply, and a settings drawer. Reads/sends via the framework
+/// <see cref="IChat"/> surface only (no packet construction) and never echoes locally — sent messages
+/// round-trip through <see cref="IChat.MessageReceived"/> like any other.
+///
+/// Phase 1 CORE of the redesign (resizable window, read-tabs, composer, quick phrases, settings drawer,
+/// config persistence). Emoji picker / inline sprite rendering is a deferred follow-up; a seam (the
+/// disabled emoji button in the composer toolbar) is left for it — see <see cref="BuildComposer"/>.
+///
+/// Laid out as partials (500-LoC CI gate): Plugin.cs (lifecycle), Plugin.Window.cs (layout + settings
+/// drawer), Plugin.Tabs.cs (read-tabs + unread), Plugin.Log.cs (rows/filter/colours), Plugin.Composer.cs
+/// (send + quick phrases), Plugin.AutoReply.cs (inbound handler + auto-reply), Plugin.Config.cs (persist).
 ///
 /// Hotkey: F12 toggles visibility (user can rebind).
 /// </summary>
-public sealed class Plugin : IStellarPlugin
+public sealed partial class Plugin : IStellarPlugin
 {
     public string Name => "ChatTools";
 
-    private const int MaxMessages = 60;   // log rows built; the newest MaxMessages are shown
+    // Log rows built; the newest N of the ACTIVE tab's filtered set are shown (filter first, then window).
+    private const int MaxLogRows = 200;
+
+    private const int FontMin = 10;
+    private const int FontMax = 22;
+    private const int FontDefault = 13;
 
     private readonly IPluginServices _services;
     private readonly ILocalization _loc;
     private readonly IChat _chat;
     private readonly IWindowControl _window;
+    private IConfigSection _cfg = null!;   // set in LoadConfig() (ctor), before any save
 
-    // Party/Whisper are ChatTools-owned, user-editable colour slots (per-preset defaults carry the
-    // light/dark adaptation). Resolved live via slot.Value in MsgColor.
-    private readonly IColorSlot _partySlot;
-    private readonly IColorSlot _whisperSlot;
-
-    // composer state
-    private string _inputText = string.Empty;
-    private int _selectedChannelIndex;   // 0=Say, 1=World, 2=Party, 3=Guild
-
-    private static readonly string[] ChannelKeys = { "chat.channel.say", "chat.channel.world", "chat.channel.party", "chat.channel.guild" };
-    private static readonly ChatTarget[] ChannelTargets = { ChatTarget.Say, ChatTarget.World, ChatTarget.Party, ChatTarget.Guild };
-
-    // auto-reply state
-    private bool _autoReplyEnabled;
-    private string _autoReplyText = "I'm away — auto-reply from Stellar ChatTools.";
-    private readonly Dictionary<string, DateTime> _autoReplyCooldown = new(StringComparer.Ordinal);
-    private static readonly TimeSpan AutoReplyCooldown = TimeSpan.FromSeconds(30);
-    private bool _autoReplySubscribed;
+    // Per-channel sender-name colours. ChatTools-owned, user-editable slots: edited through the framework
+    // Theme settings (the registry persists overrides) — IColorSlot is read-only to the plugin, so the
+    // settings drawer shows a live swatch legend rather than an in-window picker. Resolved live via .Value.
+    private IColorSlot _sayColor = null!;      // Say == the game's "Current"/Scene channel
+    private IColorSlot _worldColor = null!;
+    private IColorSlot _partyColor = null!;
+    private IColorSlot _guildColor = null!;
+    private IColorSlot _whisperColor = null!;
+    private IColorSlot _systemColor = null!;
 
     public Plugin(IPluginServices services)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _loc = services.Localization;
         _chat = services.Chat;
-        services.Log.Info("[ChatTools] plugin constructed");
+        _services.Log.Info("[ChatTools] plugin constructed");
 
-        var registry = _services.Theme.ColorRegistry;
-        _partySlot = registry.Register("ChatTools.Channel.Party", _loc.T("chat.color.party"), new Dictionary<ThemePreset, ColorRgba>
-        {
-            [ThemePreset.Default] = new ColorRgba(0.40f, 0.85f, 1.00f),
-            [ThemePreset.Dark]    = new ColorRgba(0.40f, 0.85f, 1.00f),
-            [ThemePreset.Crimson] = new ColorRgba(0.40f, 0.85f, 1.00f),
-            [ThemePreset.Light]   = new ColorRgba(0.07f, 0.42f, 0.66f),
-        });
-        _whisperSlot = registry.Register("ChatTools.Channel.Whisper", _loc.T("chat.color.whisper"), new Dictionary<ThemePreset, ColorRgba>
-        {
-            [ThemePreset.Default] = new ColorRgba(0.85f, 0.50f, 1.00f),
-            [ThemePreset.Dark]    = new ColorRgba(0.85f, 0.50f, 1.00f),
-            [ThemePreset.Crimson] = new ColorRgba(0.85f, 0.50f, 1.00f),
-            [ThemePreset.Light]   = new ColorRgba(0.52f, 0.18f, 0.72f),
-        });
+        RegisterColors();   // .Log.cs — must precede BuildRoot's colour Funcs resolving at draw time
+        LoadConfig();       // .Config.cs — quick phrases, auto-reply, font size, default send target
+        SeedUnread();       // .Tabs.cs  — seed last-seen from existing log so history doesn't light tabs
 
         _window = _services.Windows.Register(
             new WindowRegistration(
                 new WindowSpec(
                     Id:          "chattools.main",
                     Title:       _loc.T("chat.window.title"),
-                    DefaultRect: new WindowRect(21f, 596f, 480f, 0f),
+                    // Taller default so the log, composer and drawer all have room; grip-resizable (below).
+                    DefaultRect: new WindowRect(21f, 596f, 540f, 420f),
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
                     ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
                     Closable = true,
-                    Draggable = true
+                    Draggable = true,
+                    // Resizable turns OFF vertical content auto-fit; the body's ScrollElement (flexibleHeight=1)
+                    // absorbs the freed height so the log grows with the window (WindowBuilder BuildScroll).
+                    Resizable = true,
+                    MinWidth = 380f, MinHeight = 260f,
+                    MaxWidth = 1000f, MaxHeight = 1100f,
                 },
-                BuildRoot(),
+                BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 OnClose: () => _window!.SetVisible(false)),
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
                 SuggestedDefault: new KeyBinding(StellarKeyCode.F12)),
             _services.Hotkeys);
+
+        // Always-on subscription: inbound messages drive BOTH per-tab unread tracking AND (when enabled)
+        // whisper auto-reply. The handler early-outs when auto-reply is off, so the only cost of being
+        // always-subscribed is the unread bookkeeping we need regardless of the window being open.
+        _chat.MessageReceived += OnChatMessage;   // fires on the Unity main thread
     }
 
     public void Dispose()
     {
-        if (_autoReplySubscribed)
-        {
-            try { _chat.MessageReceived -= OnMessageForAutoReply; } catch { /* swallow */ }
-            _autoReplySubscribed = false;
-        }
-        _partySlot.Dispose();
-        _whisperSlot.Dispose();
+        try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
+        _sayColor.Dispose();
+        _worldColor.Dispose();
+        _partyColor.Dispose();
+        _guildColor.Dispose();
+        _whisperColor.Dispose();
+        _systemColor.Dispose();
         _window.Remove();
     }
-
-    // The window element tree, built once. Funcs re-pull the live chat log / state on the framework refresh.
-    private HudElement BuildRoot()
-    {
-        var slots = new HudElement[MaxMessages];
-        for (int i = 0; i < MaxMessages; i++) { var idx = i; slots[i] = BuildMessageRow(idx); }
-
-        var channelButtons = new List<HudElement>();
-        for (int i = 0; i < ChannelKeys.Length; i++)
-        {
-            var idx = i;
-            channelButtons.Add(new ButtonElement(() => _loc.T(ChannelKeys[idx]), () => _selectedChannelIndex = idx,
-                Active: () => _selectedChannelIndex == idx));
-        }
-        channelButtons.Add(new InputElement(() => _inputText, s => { _inputText = s; DoSend(); }, 240f, OnChange: s => _inputText = s));
-        channelButtons.Add(new ButtonElement(() => _loc.T("chat.send"), DoSend));
-
-        return new ColumnElement(new HudElement[]
-        {
-            new ScrollElement(new ListElement(() => Math.Min(_chat.RecentMessages.Count, MaxMessages), slots), 150f),
-            new RowElement(channelButtons.ToArray(), Gap: 4f),
-            new SeparatorElement(),
-            new RowElement(new HudElement[]
-            {
-                new ToggleElement(() => "", () => _autoReplyEnabled, SetAutoReply),
-                new TextElement(() => _loc.T("chat.autoReply.label")),
-            }, Gap: 6f),
-            new ConditionalElement(() => _autoReplyEnabled, new ColumnElement(new HudElement[]
-            {
-                new RowElement(new HudElement[]
-                {
-                    new TextElement(() => _loc.T("chat.reply"), Width: 56f),
-                    new InputElement(() => _autoReplyText, s => _autoReplyText = s, 320f, OnChange: s => _autoReplyText = s),
-                }, Gap: 4f),
-                new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.TextMuted),
-            }, Gap: 4f)),
-        });
-    }
-
-    // One chat-log row: timestamp | channel prefix | "sender: text", coloured by channel (Party/Whisper from
-    // their owned slots; System muted; others framework default).
-    private HudElement BuildMessageRow(int i) => new RowElement(new HudElement[]
-    {
-        new CellElement(new TextElement(() => MsgTime(i), () => MsgColor(i)), Width: 64f),
-        new CellElement(new TextElement(() => MsgPrefix(i), () => MsgColor(i)), Width: 56f),
-        new TextElement(() => MsgText(i), () => MsgColor(i)),
-    }, Gap: 4f);
-
-    // Map a slot index to the windowed message index — the slots show the LAST MaxMessages messages (newest
-    // at the bottom), so slot 0 = the oldest still-shown message, not RecentMessages[0].
-    private int MsgIndex(int slot) => Math.Max(0, _chat.RecentMessages.Count - MaxMessages) + slot;
-
-    private string MsgTime(int slot)
-    {
-        var m = _chat.RecentMessages; var i = MsgIndex(slot);
-        return i < m.Count ? m[i].Timestamp.ToLocalTime().ToString("HH:mm:ss") : "";
-    }
-
-    private string MsgPrefix(int slot)
-    {
-        var m = _chat.RecentMessages; var i = MsgIndex(slot);
-        return i < m.Count ? PrefixFor(m[i].Channel) : "";
-    }
-
-    private string MsgText(int slot)
-    {
-        var m = _chat.RecentMessages; var i = MsgIndex(slot);
-        return i < m.Count ? $"{m[i].SenderName}: {m[i].Text}" : "";
-    }
-
-    private ColorRgba? MsgColor(int slot)
-    {
-        var m = _chat.RecentMessages; var i = MsgIndex(slot);
-        if (i >= m.Count) return null;
-        return m[i].Channel switch
-        {
-            ChatChannel.Party   => _partySlot.Value,
-            ChatChannel.Whisper => _whisperSlot.Value,
-            ChatChannel.System  => _services.Theme.Colors.MenuMuted,
-            _                   => (ColorRgba?)null,   // framework default (MenuText)
-        };
-    }
-
-    private void SetAutoReply(bool enabled)
-    {
-        if (enabled == _autoReplyEnabled) return;
-        _autoReplyEnabled = enabled;
-        if (_autoReplyEnabled && !_autoReplySubscribed)
-        {
-            _chat.MessageReceived += OnMessageForAutoReply;
-            _autoReplySubscribed = true;
-        }
-        else if (!_autoReplyEnabled && _autoReplySubscribed)
-        {
-            _chat.MessageReceived -= OnMessageForAutoReply;
-            _autoReplySubscribed = false;
-        }
-    }
-
-    private void DoSend()
-    {
-        if (string.IsNullOrWhiteSpace(_inputText)) return;
-        var target = ChannelTargets[_selectedChannelIndex];
-        _chat.Send(target, _inputText);   // game dispatcher — no packet construction
-        _inputText = string.Empty;        // FieldBinding clears the composer field on the next poll
-        // No local echo — the message round-trips via MessageReceived and shows in the log.
-    }
-
-    private void OnMessageForAutoReply(ChatMessage msg)
-    {
-        if (msg.Channel != ChatChannel.Whisper) return;
-        if (msg.IsHistory) return;                   // skip server-replayed history dump on login
-        if (msg.SenderId == 0) return;               // Reply() requires a routable SenderId
-        if (string.IsNullOrWhiteSpace(_autoReplyText)) return;
-
-        var key = msg.SenderName + "|" + msg.SenderId.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (_autoReplyCooldown.TryGetValue(key, out var last) && DateTime.UtcNow - last < AutoReplyCooldown)
-            return;
-
-        _autoReplyCooldown[key] = DateTime.UtcNow;
-        _chat.Send(ChatTarget.Reply(msg), _autoReplyText);
-    }
-
-    private string PrefixFor(ChatChannel ch) => ch switch
-    {
-        ChatChannel.Say     => _loc.T("chat.prefix.say"),
-        ChatChannel.World   => _loc.T("chat.prefix.world"),
-        ChatChannel.Party   => _loc.T("chat.prefix.party"),
-        ChatChannel.Guild   => _loc.T("chat.prefix.guild"),
-        ChatChannel.Whisper => _loc.T("chat.prefix.whisper"),
-        ChatChannel.System  => _loc.T("chat.prefix.sys"),
-        _                   => _loc.T("chat.prefix.unknown"),
-    };
 }
