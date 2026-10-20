@@ -32,6 +32,7 @@
   "chat.reply.hint": "ウィスパーをクリックして返信",
   "chat.reply.to": "{0} に返信中",
   "chat.send": "送信",
+  "chat.sendTo": "送信先",
   "chat.settings.button": "設定",
   "chat.settings.colors": "チャンネル色",
   "chat.settings.fontSize": "文字サイズ",

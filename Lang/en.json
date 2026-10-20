@@ -32,6 +32,7 @@
   "chat.reply.hint": "Click a whisper to reply",
   "chat.reply.to": "Replying to {0}",
   "chat.send": "Send",
+  "chat.sendTo": "Send to",
   "chat.settings.button": "Settings",
   "chat.settings.colors": "Channel colors",
   "chat.settings.fontSize": "Font size",

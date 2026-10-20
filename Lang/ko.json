@@ -32,6 +32,7 @@
   "chat.reply.hint": "귓속말을 클릭하여 응답",
   "chat.reply.to": "{0} 님에게 응답 중",
   "chat.send": "보내기",
+  "chat.sendTo": "보낼 곳",
   "chat.settings.button": "설정",
   "chat.settings.colors": "채널 색상",
   "chat.settings.fontSize": "글자 크기",

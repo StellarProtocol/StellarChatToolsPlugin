@@ -32,6 +32,7 @@
   "chat.reply.hint": "Klik bisikan untuk membalas",
   "chat.reply.to": "Membalas {0}",
   "chat.send": "Kirim",
+  "chat.sendTo": "Kirim ke",
   "chat.settings.button": "Pengaturan",
   "chat.settings.colors": "Warna kanal",
   "chat.settings.fontSize": "Ukuran font",

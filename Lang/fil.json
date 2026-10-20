@@ -32,6 +32,7 @@
   "chat.reply.hint": "I-click ang bulong para sumagot",
   "chat.reply.to": "Sumasagot kay {0}",
   "chat.send": "Ipadala",
+  "chat.sendTo": "Ipadala sa",
   "chat.settings.button": "Mga setting",
   "chat.settings.colors": "Mga kulay ng channel",
   "chat.settings.fontSize": "Laki ng font",
