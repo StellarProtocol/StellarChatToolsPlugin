@@ -13,7 +13,11 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private bool _settingsOpen;
-    private int _fontSize = FontDefault;
+
+    // NOTE: the log font-size control was removed — TextElement font size is ignored on the GlassMenu surface
+    // (only HudOverlay honours it), so an A-/A+ stepper here was a confirmed no-op. Honouring a per-log font
+    // size needs a framework change (per-TextElement size on the Menu text path); the old config key is simply
+    // left dormant (no longer read or written).
 
     private HudElement BuildRoot() => new ColumnElement(new HudElement[]
     {
@@ -47,19 +51,6 @@ public sealed partial class Plugin
             }, Gap: 4f),
             new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.MenuMuted),
         }, Gap: 4f)),
-
-        new SeparatorElement(),
-
-        // Font size (A- / value / A+). NOTE: TextElement font size is only honoured on the HudOverlay surface;
-        // this window is GlassMenu, so the control persists + drives DynamicFontSize but will not visibly resize
-        // the log text until the framework honours FontSize on the Menu path (see the handoff note).
-        new RowElement(new HudElement[]
-        {
-            new TextElement(() => _loc.T("chat.settings.fontSize"), Width: 90f),
-            new ButtonElement(() => "A-", FontDown, Width: 34f),
-            new TextElement(() => _fontSize.ToString(), Width: 30f, Align: TextAlign.Center),
-            new ButtonElement(() => "A+", FontUp, Width: 34f),
-        }, Gap: 4f),
 
         new SeparatorElement(),
 
@@ -120,7 +111,4 @@ public sealed partial class Plugin
         }
         return new ColumnElement(children.ToArray(), Gap: 2f);
     }
-
-    private void FontUp()   { _fontSize = Clamp(_fontSize + 1, FontMin, FontMax); SaveFontSize(); }
-    private void FontDown() { _fontSize = Clamp(_fontSize - 1, FontMin, FontMax); SaveFontSize(); }
 }

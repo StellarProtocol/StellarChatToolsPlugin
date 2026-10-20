@@ -19,7 +19,8 @@ public sealed partial class Plugin
     // Fires on the Unity main thread for every message (live + login history replay).
     private void OnChatMessage(ChatMessage msg)
     {
-        NoteIncoming(msg);   // .Tabs.cs — unread + log-dirty; must run regardless of auto-reply state
+        NoteIncoming(msg);        // .Tabs.cs    — unread + log-dirty; must run regardless of auto-reply state
+        LearnSelfFromEcho(msg);   // .Bubbles.cs — adopt our own identity when a sent message echoes back
 
         if (!_autoReplyEnabled) return;
         if (msg.Channel != ChatChannel.Whisper) return;
@@ -32,6 +33,7 @@ public sealed partial class Plugin
             return;
 
         _autoReplyCooldownBySender[key] = DateTime.UtcNow;
+        NoteSelfSend(ChatChannel.Whisper, _autoReplyText);   // .Bubbles.cs — the auto-reply echoes back too
         _chat.Send(ChatTarget.Reply(msg), _autoReplyText);
     }
 

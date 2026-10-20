@@ -29,10 +29,6 @@ public sealed partial class Plugin : IStellarPlugin
     // Log rows built; the newest N of the ACTIVE tab's filtered set are shown (filter first, then window).
     private const int MaxLogRows = 200;
 
-    private const int FontMin = 10;
-    private const int FontMax = 22;
-    private const int FontDefault = 13;
-
     private readonly IPluginServices _services;
     private readonly ILocalization _loc;
     private readonly IChat _chat;
@@ -65,8 +61,9 @@ public sealed partial class Plugin : IStellarPlugin
                 new WindowSpec(
                     Id:          "chattools.main",
                     Title:       _loc.T("chat.window.title"),
-                    // Taller default so the log, composer and drawer all have room; grip-resizable (below).
-                    DefaultRect: new WindowRect(21f, 596f, 540f, 420f),
+                    // Compact bubble layout: a narrower default than the game's chat (favouring density), but wide
+                    // enough for the 7 read-tabs; grip-resizable (below) so users can grow it.
+                    DefaultRect: new WindowRect(21f, 586f, 440f, 430f),
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
@@ -76,7 +73,7 @@ public sealed partial class Plugin : IStellarPlugin
                     // Resizable turns OFF vertical content auto-fit; the body's ScrollElement (flexibleHeight=1)
                     // absorbs the freed height so the log grows with the window (WindowBuilder BuildScroll).
                     Resizable = true,
-                    MinWidth = 380f, MinHeight = 260f,
+                    MinWidth = 360f, MinHeight = 260f,
                     MaxWidth = 1000f, MaxHeight = 1100f,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh

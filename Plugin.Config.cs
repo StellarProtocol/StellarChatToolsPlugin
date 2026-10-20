@@ -14,7 +14,6 @@ public sealed partial class Plugin
     private const string CfgQuickPhrases   = "quickPhrases";
     private const string CfgAutoReplyOn    = "autoReply.enabled";
     private const string CfgAutoReplyText  = "autoReply.text";
-    private const string CfgFontSize       = "fontSize";
     private const string CfgSendTarget     = "sendTarget";
 
     private void LoadConfig()
@@ -30,7 +29,6 @@ public sealed partial class Plugin
         // run before _loc is assigned). Only fall back when nothing was persisted.
         if (string.IsNullOrEmpty(_autoReplyText)) _autoReplyText = _loc.T("chat.autoReply.default");
 
-        _fontSize = Clamp(_cfg.Get(CfgFontSize, FontDefault), FontMin, FontMax);
         _sendTargetIndex = Clamp(_cfg.Get(CfgSendTarget, 0), 0, 4);
     }
 
@@ -52,12 +50,6 @@ public sealed partial class Plugin
     private void SaveAutoReplyText()
     {
         _cfg.Set(CfgAutoReplyText, _autoReplyText ?? "");
-        _cfg.Save();
-    }
-
-    private void SaveFontSize()
-    {
-        _cfg.Set(CfgFontSize, _fontSize);
         _cfg.Save();
     }
 

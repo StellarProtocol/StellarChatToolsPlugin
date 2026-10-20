@@ -88,9 +88,14 @@ public sealed partial class Plugin
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
     }
 
-    // The tab strip: All · World · Current · Party · Guild · Whisper · System. Active tab highlighted; a
-    // trailing bullet marks unread. Labels + the dot resolve at draw time, so a live language switch and
-    // live unread state both show without a rebuild.
+    // Cyan accent under the tab strip (matches the game's segmented-tab underline). A full-width 3px bar; the
+    // SDK has no colour-bindable line primitive, so BarElement at fraction 1.0 with a fixed cyan fill is the
+    // closest — see the escalation report (a per-tab underline would need a new framework element).
+    private static readonly ColorRgba TabAccent = new(0.30f, 0.82f, 1f, 0.95f);
+
+    // The tab strip: All · World · Current · Party · Guild · Whisper · System, over the cyan accent line.
+    // Active tab highlighted (ButtonElement.Active → accent fill); a trailing bullet marks unread. Labels +
+    // the dot resolve at draw time, so a live language switch and live unread state both show without a rebuild.
     private HudElement BuildTabBar()
     {
         var buttons = new List<HudElement>(Tabs.Length);
@@ -102,6 +107,10 @@ public sealed partial class Plugin
                 () => SetActiveTab(tab),
                 Active: () => _activeTab == tab));
         }
-        return new RowElement(buttons.ToArray(), Gap: 3f);
+        return new ColumnElement(new HudElement[]
+        {
+            new RowElement(buttons.ToArray(), Gap: 2f),
+            new BarElement(() => 1f, TabAccent) { Height = 3f, FillWidth = true },
+        }, Gap: 2f);
     }
 }

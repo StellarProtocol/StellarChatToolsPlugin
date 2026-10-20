@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// The rolling chat log: per-channel colour slots, the pre-built row slots, the active-tab filter, and the
-/// row formatting (time · sender · ": " · message). Rows use the fixed-slot + windowed-index pattern applied
-/// to the FILTERED list (filter first, then show the newest <see cref="MaxLogRows"/>). The message text wraps;
-/// the sender name is coloured by channel.
+/// The rolling chat log: per-channel colour slots, the pre-built bubble slots, the active-tab filter, and the
+/// per-message accessors the bubble rows read. Slots use the fixed-slot + windowed-index pattern applied to
+/// the FILTERED list (filter first, then show the newest <see cref="MaxLogRows"/>). Bubble rendering (avatar,
+/// speech bubble, self/other alignment) lives in Plugin.Bubbles.cs; this file owns the data plumbing.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -19,9 +18,6 @@ public sealed partial class Plugin
     private readonly List<int> _filtered = new(MaxLogRows);
     private bool _logDirty = true;
     private ChatTab _lastFilterTab = (ChatTab)(-1);   // force first EnsureFiltered to build
-
-    // Scratch builder for the compact sender-meta string (Lv/job/guild), reused to avoid per-row allocation.
-    private readonly StringBuilder _metaSb = new(32);
 
     private void RegisterColors()
     {
@@ -48,27 +44,12 @@ public sealed partial class Plugin
     private HudElement BuildLogScroll()
     {
         var slots = new HudElement[MaxLogRows];
-        for (int i = 0; i < MaxLogRows; i++) { var idx = i; slots[idx] = BuildLogRow(idx); }
+        for (int i = 0; i < MaxLogRows; i++) { var idx = i; slots[idx] = BuildBubbleSlot(idx); }   // .Bubbles.cs
         // Height here is the PREFERRED (baseline) height; in a Resizable window the scroll's flexibleHeight=1
         // lets it absorb the slack and grow with the window, so the log fills the freed vertical space.
         return new ScrollElement(new ListElement(VisibleLogCount, slots), 200f);
     }
 
-    // One log row. Whole row is a SelectableElement so a whisper row can be clicked to reply (OnRowClick only
-    // acts on whisper rows; other clicks are no-ops). Fixed cells for time/meta/sender (NoWrap, clip in their
-    // own mask) + a weighted message cell that wraps. DynamicFontSize is wired per the brief; note it is only
-    // honoured on the HudOverlay surface — on this GlassMenu window the framework fixes the text size.
-    private HudElement BuildLogRow(int i) => new SelectableElement(
-        new RowElement(new HudElement[]
-        {
-            new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true) { DynamicFontSize = LogFont }, Width: 54f),
-            new CellElement(new TextElement(() => LogMeta(i), MutedCol, NoWrap: true) { DynamicFontSize = LogFont }, Width: 82f),
-            new CellElement(new TextElement(() => LogSender(i), () => LogSenderColor(i), NoWrap: true) { DynamicFontSize = LogFont }, Width: 108f),
-            new CellElement(new TextElement(() => LogText(i), () => LogMsgColor(i)) { DynamicFontSize = LogFont }, Weight: 1f),
-        }, Gap: 6f),
-        OnClick: () => OnRowClick(i));
-
-    private int LogFont() => _fontSize;
     private ColorRgba? MutedCol() => _services.Theme.Colors.MenuMuted;
 
     // Rebuild the filtered index list when a message arrived (_logDirty) or the tab changed. Cheap no-op when
@@ -111,21 +92,9 @@ public sealed partial class Plugin
         return false;
     }
 
+    // Compact timestamp (HH:mm — the game drops seconds in its bubble layout).
     private string LogTime(int slot)
-        => TryMsg(slot, out var m) ? m.Timestamp.ToLocalTime().ToString("HH:mm:ss") : "";
-
-    // Compact, muted Lv/job/guild from SenderMeta (any field may be null — guard). Blank when no meta.
-    private string LogMeta(int slot)
-    {
-        if (!TryMsg(slot, out var m) || m.Sender is not { } s) return "";
-        _metaSb.Clear();
-        if (s.Level > 0) _metaSb.Append('L').Append(s.Level);
-        if (!string.IsNullOrEmpty(s.Job)) { if (_metaSb.Length > 0) _metaSb.Append(' '); _metaSb.Append(s.Job); }
-        if (!string.IsNullOrEmpty(s.Guild)) { if (_metaSb.Length > 0) _metaSb.Append(' '); _metaSb.Append(s.Guild); }
-        return _metaSb.ToString();
-    }
-
-    private string LogSender(int slot) => TryMsg(slot, out var m) ? m.SenderName + ":" : "";
+        => TryMsg(slot, out var m) ? m.Timestamp.ToLocalTime().ToString("HH:mm") : "";
 
     private string LogText(int slot) => TryMsg(slot, out var m) ? m.Text : "";
 
