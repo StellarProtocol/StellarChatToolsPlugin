@@ -46,6 +46,7 @@ public sealed partial class Plugin
     // folded into each row's measured height as a trailing SpacerElement (see BuildBubbleSlot) rather than a
     // framework RowGap (which would need a framework redeploy).
     private const float BubbleRowGap = 3f;
+    private const float StickerSize = 64f;   // chat sticker render size (px) — tunable
 
     // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages AND to key our
     // own avatar lookup (prefer the learned charId over a 0 SenderId on an echoed self row).
@@ -93,7 +94,8 @@ public sealed partial class Plugin
             {
                 BuildSenderName(i, self),
             }, Gap: 4f),
-            new TextElement(() => LogText(i), () => LogMsgColor(i)),
+            new ConditionalElement(() => IsStickerRow(i), BuildStickerImage(i),
+                new TextElement(() => LogText(i), () => LogMsgColor(i))),
         }, Gap: 1f))
         { MaxWidth = BubbleMaxWidth };
 
@@ -122,6 +124,18 @@ public sealed partial class Plugin
     }
 
     private bool IsWhisperRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper && m.SenderId != 0;
+
+    // A whole-message picture-emoji/sticker row (StickerId != 0). Its body renders as an image, not the junk
+    // "emojiPic=..." placeholder text the wire leaves in Text for these messages.
+    private bool IsStickerRow(int slot) => TryMsg(slot, out var m) && m.StickerId != 0;
+
+    // The sticker image for a row. GameTextureElement polls the texture each frame; LoadStickerIcon is cached, so
+    // calling it again in the Uv func (to recover the sub-rect) is cheap and avoids shared-state ordering issues.
+    private HudElement BuildStickerImage(int i) =>
+        new GameTextureElement(
+            () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; return id == 0 ? null : _services.GameAssets.LoadStickerIcon(id, out _); },
+            (int)StickerSize, (int)StickerSize,
+            () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); });
 
     // The charId whose avatar photo this row shows (0 = unknown → the default face). For our own echoed rows the
     // SenderId can be 0, so prefer the learned _selfCharId when we have it. Fed to AvatarTextureFor (Plugin.Avatars.cs).
