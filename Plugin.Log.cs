@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
@@ -100,6 +101,20 @@ public sealed partial class Plugin
         var m = _chat.RecentMessages;
         for (int i = 0; i < m.Count; i++)
             if (ch == null || m[i].Channel == ch.Value) _filtered.Add(i);
+
+        // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER
+        // CHANNEL — each channel's whole time-span concatenated after the last → the ring is globally out of time
+        // order (login dump looks scrambled). Timestamp is WIRE-sourced (Unix seconds → UTC, same domain live +
+        // history), so stable-sort the filtered indices ascending by Timestamp to re-interleave them
+        // chronologically: oldest first → newest last = bottom, matching StickToBottom. OrderBy is a STABLE sort,
+        // so same-second ties keep arrival order (the indices were added above in ascending arrival order, which
+        // IS monotonic with arrival). Live messages already arrive in time order → a no-op for them; only the
+        // scrambled login burst gets reordered. Must materialize (ToArray) BEFORE Clear — OrderBy is lazy over
+        // _filtered itself. ⚠️ Do NOT tie-break on MsgId: it is per-peer for whispers, not globally monotonic.
+        var ordered = _filtered.OrderBy(i => m[i].Timestamp).ToArray();
+        _filtered.Clear();
+        _filtered.AddRange(ordered);
+
         _lastFilterTab = _activeTab;
         _logDirty = false;
     }
