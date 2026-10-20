@@ -93,7 +93,6 @@ public sealed partial class Plugin
             new RowElement(new HudElement[]
             {
                 BuildSenderName(i, self),
-                new TextElement(() => LogLevelBadge(i), MutedCol, NoWrap: true),
             }, Gap: 4f),
             new TextElement(() => LogText(i), () => LogMsgColor(i)),
         }, Gap: 1f))
@@ -135,10 +134,6 @@ public sealed partial class Plugin
     }
 
     private string LogSenderName(int slot) => TryMsg(slot, out var m) ? m.SenderName : "";
-
-    // Muted "Lv14" badge from the one sender-meta field the wire actually populates (Level); blank when 0.
-    private string LogLevelBadge(int slot)
-        => TryMsg(slot, out var m) && m.Sender is { Level: > 0 } s ? "Lv" + s.Level : "";
 
     // ---- Self-detection -------------------------------------------------------------------------------
 
