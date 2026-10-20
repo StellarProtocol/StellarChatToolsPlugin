@@ -24,9 +24,11 @@ namespace Stellar.ChatTools;
 /// <see cref="BuildSenderName"/>), NOT by wrapping the bubble in a SelectableElement (which would repaint a
 /// full-width chip behind the hugged bubble — the exact baggy look we removed).
 ///
-/// Fidelity note: avatars are colour-coded chips (hue hashed from the sender name), NOT class/role icons —
-/// the chat wire carries no profession (<c>SenderMeta.Job</c> is hard-coded null at every framework
-/// construction site: WireProtocol.ChitChat.cs; PandaChatProbe.Receive.Chat.cs), so there is nothing to map.
+/// Fidelity note: avatars are the sender's REAL profile photo, resolved out-of-band by charId through
+/// <c>IPlayerProfile.RequestAvatarUrl</c> and downloaded/disk+LRU-cached in <see cref="Plugin"/> (Plugin.Avatars.cs);
+/// everyone falls back to the game's shared default face while loading or when they have no custom photo. (The chat
+/// wire still carries no profession — <c>SenderMeta.Job</c> is hard-coded null at every framework construction site —
+/// so a class/role icon remains underivable; the photo comes from a separate Social RPC, not the chat payload.)
 /// </summary>
 public sealed partial class Plugin
 {
@@ -43,7 +45,8 @@ public sealed partial class Plugin
     // framework RowGap (which would need a framework redeploy).
     private const float BubbleRowGap = 3f;
 
-    // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages.
+    // Learned local-player identity (0/null = not yet learned). Used to right-align our own messages AND to key our
+    // own avatar lookup (prefer the learned charId over a 0 SenderId on an echoed self row).
     private long _selfCharId;
     private string? _selfName;
 
@@ -52,16 +55,6 @@ public sealed partial class Plugin
     private string? _pendingSelfText;
     private ChatChannel _pendingSelfChannel;
     private DateTime _pendingSelfAt;
-
-    // Stable, pleasant avatar palette — index chosen by a cheap name hash so each sender reads distinctly.
-    private static readonly ColorRgba[] AvatarPalette =
-    {
-        new(0.86f, 0.45f, 0.45f, 1f), new(0.86f, 0.62f, 0.38f, 1f),
-        new(0.80f, 0.74f, 0.40f, 1f), new(0.50f, 0.78f, 0.50f, 1f),
-        new(0.40f, 0.78f, 0.74f, 1f), new(0.45f, 0.66f, 0.90f, 1f),
-        new(0.62f, 0.55f, 0.90f, 1f), new(0.85f, 0.55f, 0.82f, 1f),
-    };
-    private static readonly ColorRgba SelfAvatarColor = new(0.30f, 0.80f, 1f, 1f);
 
     // One RECYCLED pool slot (VirtualListElement reuses ~LogPoolSize of these across the whole log, repositioning +
     // rebinding them as you scroll — NOT a fixed display position). It lazily builds the LEFT (others) or RIGHT
@@ -83,7 +76,10 @@ public sealed partial class Plugin
 
     private HudElement BuildBubbleRow(int i, bool self)
     {
-        var avatar = new SwatchElement(() => self ? SelfAvatarColor : AvatarColor(i), AvatarSize);
+        // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). Circular via a CornerRadius = half the
+        // size stencil mask. Everyone resolves to the shared default face until (and unless) their real photo loads.
+        var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
+            { CornerRadius = (int)(AvatarSize / 2f) };
 
         // Bubble body: the sender/Lv line over the wrapping message text, in a content-hugging BubbleElement.
         // The bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and
@@ -124,13 +120,12 @@ public sealed partial class Plugin
 
     private bool IsWhisperRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper && m.SenderId != 0;
 
-    // Deterministic palette pick from the sender name (FNV-ish fold; empty name → slot 0).
-    private ColorRgba AvatarColor(int slot)
+    // The charId whose avatar photo this row shows (0 = unknown → the default face). For our own echoed rows the
+    // SenderId can be 0, so prefer the learned _selfCharId when we have it. Fed to AvatarTextureFor (Plugin.Avatars.cs).
+    private long SenderCharId(int slot, bool self)
     {
-        if (!TryMsg(slot, out var m) || string.IsNullOrEmpty(m.SenderName)) return AvatarPalette[0];
-        uint h = 2166136261u;
-        foreach (var ch in m.SenderName) { h ^= ch; h *= 16777619u; }
-        return AvatarPalette[h % (uint)AvatarPalette.Length];
+        if (self && _selfCharId != 0) return _selfCharId;
+        return TryMsg(slot, out var m) ? m.SenderId : 0;
     }
 
     private string LogSenderName(int slot) => TryMsg(slot, out var m) ? m.SenderName : "";

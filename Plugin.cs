@@ -102,5 +102,6 @@ public sealed partial class Plugin : IStellarPlugin
         _whisperColor.Dispose();
         _systemColor.Dispose();
         _window.Remove();
+        DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }
