@@ -85,19 +85,35 @@ public sealed partial class Plugin
         var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
             { CornerRadius = (int)AvatarCorner };
 
-        // Bubble body: the sender/Lv line over the wrapping message text, in a content-hugging BubbleElement.
-        // The bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and
-        // defeat the hug). MaxWidth caps a long message so it wraps; FillColor stays null = themed accent tint.
-        var bubble = new BubbleElement(new ColumnElement(new HudElement[]
+        // ⚠️ The sticker-vs-text ConditionalElement MUST wrap the WHOLE bubble — it must NEVER sit INSIDE the bubble's
+        // measured child. BubbleBinding.Apply() hugs the bubble each tick by reading LayoutUtility.GetPreferredWidth(
+        // bubble.Child) (framework WindowBuilder.Bindings.Misc.cs). A ConditionalElement among those measured descendants
+        // is SetActive-toggled in an EARLIER binding pass than the Bubble's width read, with only a DEFERRED
+        // MarkLayoutForRebuild between them (framework WindowBuilder.Token.cs ApplyValues order) — so during a scroll
+        // (VirtualListElement rebinds the recycled slot to a new row index → the inner Cond re-picks → toggles SetActive)
+        // the width read lands on a stale/half-solved layout and pins the bubble narrow for a frame. The wrapping Text
+        // then re-wraps 1↔2 lines and the bubble visibly grows/shrinks while scrolling — the regression introduced by
+        // 254cf4e (the user validated the pre-254cf4e plain-Column child as stable: "look good now").
+        //
+        // Fix: lift the Cond OUT so EACH branch is a COMPLETE BubbleElement whose child is a PLAIN Column (no Cond among
+        // the width-measured descendants — the stable pre-254cf4e shape). The Cond GO itself has flexibleWidth=0
+        // (framework WindowBuilder.Layout.cs BuildConditional) so the Row's HLG won't stretch it, and its VLG reports the
+        // active bubble's hugged preferred width — so the bubble still hugs exactly as before, sticker or text.
+        //
+        // Each bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and defeat
+        // the hug). MaxWidth caps a long message so it wraps; FillColor stays null = themed accent tint.
+        HudElement MakeBubble(HudElement body) => new BubbleElement(new ColumnElement(new HudElement[]
         {
-            new RowElement(new HudElement[]
-            {
-                BuildSenderName(i, self),
-            }, Gap: 4f),
-            new ConditionalElement(() => IsStickerRow(i), BuildStickerImage(i),
-                new TextElement(() => LogText(i), () => LogMsgColor(i))),
+            new RowElement(new HudElement[] { BuildSenderName(i, self) }, Gap: 4f),
+            body,
         }, Gap: 1f))
         { MaxWidth = BubbleMaxWidth };
+
+        // Whole-bubble branches: sticker-image bubble vs wrapping-text bubble. The Cond now sits directly in the Row's
+        // HLG where the single bubble used to — identical visuals, only the Cond's depth moved (out of the measured child).
+        HudElement bubble = new ConditionalElement(() => IsStickerRow(i),
+            MakeBubble(BuildStickerImage(i)),
+            MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i))));
 
         var time   = new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true), Width: TimeColWidth);
         var gutter = new SpacerElement();   // flexible — soaks the row slack so the bubble hugs and the row packs
