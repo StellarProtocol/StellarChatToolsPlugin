@@ -26,24 +26,26 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private const int   MaxStickerSlots    = 128;   // pre-allocated grid cells (element tree is fixed at Register);
-                                                    // must be >= the largest free category (~98 observed)
-    private const int   MaxStickerCats     = 4;     // Types 1-4 (5=QuickMessage excluded) → at most 4 category tabs
-    private const int   StickerGridColumns = 6;     // fits the 360px-min window (36px thumb + cell padding)
-    private const float StickerThumbSize   = 36f;   // grid thumbnail px
-    private const float StickerCellSize    = 42f;   // grid cell px (thumb + a little padding)
-    private const float StickerTabSize     = 26f;   // category-tab icon px
-    private const float StickerGridHeight  = 176f;  // scroll viewport height
+                                                    // must be >= the largest single group (per-GroupId now; was ~98 by Type)
+    private const int   MaxStickerCats     = 16;    // one tab per GroupId (pack); ~13 distinct free non-QuickMessage groups
+    private const int   StickerGridColumns = 6;     // advisory min under the Flexible/FillWidth grid (ignored when flowing)
+    private const float StickerThumbSize   = 56f;   // grid thumbnail px
+    private const float StickerCellSize    = 64f;   // grid cell px (thumb + a little padding)
+    private const float StickerTabSize     = 26f;   // category-tab icon px (small so ~13 tabs fit a row)
+    private const float StickerGridHeight  = 200f;  // scroll viewport height
 
     // Open state. Mutually exclusive with _quickOpen (see ToggleStickerPicker / ToggleQuickPhrases in Plugin.Composer.cs).
     private bool _stickerOpen;
-    private int  _stickerCat;   // index into StickerCategories() (NOT the raw Type)
+    private int  _stickerCat;   // index into StickerCategories() (NOT the raw GroupId)
 
-    // Filtered catalog (free, non-QuickMessage), cached once non-empty, plus the distinct Types present (sorted).
-    // Both rebuild while empty so a pre-table-load open retries on the next open (GetSendableStickers is itself
-    // framework-cached once populated). Active-category list cached by Type so the per-frame slot Funcs don't alloc.
+    // Filtered catalog (free, non-QuickMessage), cached once non-empty, plus the distinct GroupIds present (sorted).
+    // The game's chat emoji panel tabs by GroupId (pack) — each tab = one GroupId — so we group by GroupId, NOT by the
+    // coarse Type (which lumped every pack of a Type into one giant tab). Both rebuild while empty so a pre-table-load
+    // open retries on the next open (GetSendableStickers is itself framework-cached once populated). Active-category
+    // list cached by GroupId so the per-frame slot Funcs don't alloc.
     private IReadOnlyList<StickerInfo>? _stickerCatalog;
     private List<int> _stickerCats = new();
-    private int _activeCatType = -1;
+    private int _activeCatGroup = -1;
     private List<StickerInfo> _activeCatList = new();
 
     private void ToggleStickerPicker()
@@ -53,7 +55,8 @@ public sealed partial class Plugin
     }
 
     // Populate _stickerCatalog + _stickerCats once the table has loaded. Returns false (no cache) while the catalog
-    // is still empty so a later open retries. Filters to FREE stickers and drops QuickMessage (Type 5).
+    // is still empty so a later open retries. Filters to FREE stickers and drops QuickMessage (Type 5). Category tabs
+    // are the distinct GroupIds (packs) present, sorted ascending — mirrors the game's chat emoji panel.
     private bool EnsureStickerCatalog()
     {
         if (_stickerCatalog is { Count: > 0 }) return true;
@@ -65,7 +68,7 @@ public sealed partial class Plugin
         {
             if (!s.DefaultUnlocked || s.Type == 5) continue;   // free only; QuickMessage is canned text, not an image
             filtered.Add(s);
-            if (!cats.Contains(s.Type)) cats.Add(s.Type);
+            if (!cats.Contains(s.GroupId)) cats.Add(s.GroupId);   // one tab per pack (GroupId), not per coarse Type
         }
         if (filtered.Count == 0) return false;
         cats.Sort();
@@ -80,18 +83,18 @@ public sealed partial class Plugin
         return _stickerCats;
     }
 
-    // The stickers of the currently-selected category, cached by Type so the grid's per-frame Funcs don't allocate.
+    // The stickers of the currently-selected category, cached by GroupId so the grid's per-frame Funcs don't allocate.
     private List<StickerInfo> ActiveCategoryStickers()
     {
         var cats = StickerCategories();
-        int type = (_stickerCat >= 0 && _stickerCat < cats.Count) ? cats[_stickerCat]
-                 : (cats.Count > 0 ? cats[0] : 0);
-        if (type != _activeCatType)
+        int group = (_stickerCat >= 0 && _stickerCat < cats.Count) ? cats[_stickerCat]
+                  : (cats.Count > 0 ? cats[0] : 0);
+        if (group != _activeCatGroup)
         {
-            _activeCatType = type;
+            _activeCatGroup = group;
             var list = new List<StickerInfo>();
             if (_stickerCatalog is { } cat)
-                foreach (var s in cat) if (s.Type == type) list.Add(s);
+                foreach (var s in cat) if (s.GroupId == group) list.Add(s);
             _activeCatList = list;
         }
         return _activeCatList;
@@ -103,13 +106,13 @@ public sealed partial class Plugin
         return idx >= 0 && idx < list.Count ? list[idx].ConfigId : 0;
     }
 
-    // A representative icon id for a category tab = its first sticker (avoids any localized category label text).
+    // A representative icon id for a category tab = the first sticker of that GroupId (avoids any localized label text).
     private int CategoryIconId(int catIdx)
     {
         if (!EnsureStickerCatalog() || catIdx < 0 || catIdx >= _stickerCats.Count) return 0;
-        int type = _stickerCats[catIdx];
+        int group = _stickerCats[catIdx];
         if (_stickerCatalog is { } cat)
-            foreach (var s in cat) if (s.Type == type) return s.ConfigId;
+            foreach (var s in cat) if (s.GroupId == group) return s.ConfigId;
         return 0;
     }
 
@@ -144,9 +147,10 @@ public sealed partial class Plugin
         new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight),
     }, Gap: 4f));
 
-    // Representative-icon category tabs (icon-only — no localized labels). A tab shows its category's first sticker;
-    // SelectableElement.Selected highlights the active one. The icon is wrapped in a centred RowElement so the
-    // Selectable/grid cell's width force-expand doesn't squish the square thumbnail (WindowBuilder-Patterns.md).
+    // Representative-icon category tabs (one per GroupId/pack, icon-only — no localized labels). A tab shows its
+    // group's first sticker; SelectableElement.Selected highlights the active one. The icon is wrapped in a centred
+    // RowElement so the Selectable/grid cell's width force-expand doesn't squish the square thumbnail
+    // (WindowBuilder-Patterns.md). FillWidth lets the ~13-tab strip flow/wrap in a narrow window instead of overflowing.
     private HudElement BuildCategoryTabs()
     {
         var slots = new HudElement[MaxStickerCats];
@@ -164,7 +168,7 @@ public sealed partial class Plugin
                 OnClick: () => OnPickCategory(idx),
                 Selected: () => _stickerCat == idx);
         }
-        return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats);
+        return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats) { FillWidth = true };
     }
 
     // Scrollable multi-column grid of the active category's thumbnails. Pre-allocated pool of MaxStickerSlots cells
