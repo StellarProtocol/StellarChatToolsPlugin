@@ -186,7 +186,10 @@ public sealed partial class Plugin
                 }, Justify: RowJustify.Center),
                 OnClick: () => OnPickSticker(idx));
         }
+        // FillWidth flows the grid to fill the popover width (as many StickerCellSize cells per row as fit) and
+        // re-wraps on window resize — a fixed column count left dead space on the right of a wide/resized window.
+        // StickerGridColumns stays as an advisory min; the Flexible grid ignores it (harmless).
         return new ListElement(() => Math.Min(ActiveCategoryStickers().Count, MaxStickerSlots), slots,
-            Columns: StickerGridColumns, CellWidth: StickerCellSize, CellHeight: StickerCellSize);
+            Columns: StickerGridColumns, CellWidth: StickerCellSize, CellHeight: StickerCellSize) { FillWidth = true };
     }
 }
