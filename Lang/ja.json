@@ -37,6 +37,7 @@
   "chat.settings.colors": "チャンネル色",
   "chat.settings.fontSize": "文字サイズ",
   "chat.settings.title": "設定",
+  "chat.sticker.loading": "スタンプを読み込み中…",
   "chat.tab.all": "すべて",
   "chat.tab.current": "周辺",
   "chat.tab.guild": "ギルド",

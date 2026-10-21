@@ -70,7 +70,9 @@ public sealed partial class Plugin
             // in a weighted cell so the dark rounded input stretches across the row like the game's composer.
             new RowElement(new HudElement[]
             {
-                new ButtonElement(() => "＋", () => _quickOpen = !_quickOpen, Active: () => _quickOpen, Width: 30f),
+                new ButtonElement(() => "＋", ToggleQuickPhrases, Active: () => _quickOpen, Width: 30f),
+                // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs).
+                new ButtonElement(() => "☺", ToggleStickerPicker, Active: () => _stickerOpen, Width: 30f),
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput), Weight: 1f),
                 new TextElement(() => CharCounter(), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
                 new ButtonElement(() => _loc.T("chat.send"), DoSend),
@@ -78,7 +80,16 @@ public sealed partial class Plugin
 
             // Quick-phrases popover: click a phrase to send it to the current target, then close.
             new ConditionalElement(() => _quickOpen, BuildQuickPopover()),
+            // Sticker picker popover (.Stickers.cs) — sibling of the quick-phrase one; only one is open at a time.
+            new ConditionalElement(() => _stickerOpen, BuildStickerPopover()),
         }, Gap: 4f);
+    }
+
+    // ＋ quick-phrase toggle — closes the sticker picker when it opens (mutually exclusive popovers).
+    private void ToggleQuickPhrases()
+    {
+        _quickOpen = !_quickOpen;
+        if (_quickOpen) _stickerOpen = false;
     }
 
     // Localized dropdown option list (Say/World/Party/Guild/Whisper), rebuilt each open so a language switch

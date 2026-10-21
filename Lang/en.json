@@ -37,6 +37,7 @@
   "chat.settings.colors": "Channel colors",
   "chat.settings.fontSize": "Font size",
   "chat.settings.title": "Settings",
+  "chat.sticker.loading": "Loading stickers…",
   "chat.tab.all": "All",
   "chat.tab.current": "Current",
   "chat.tab.guild": "Guild",

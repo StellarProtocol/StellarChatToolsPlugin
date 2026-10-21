@@ -37,6 +37,7 @@
   "chat.settings.colors": "สีของแชนเนล",
   "chat.settings.fontSize": "ขนาดตัวอักษร",
   "chat.settings.title": "ตั้งค่า",
+  "chat.sticker.loading": "กำลังโหลดสติกเกอร์…",
   "chat.tab.all": "ทั้งหมด",
   "chat.tab.current": "รอบตัว",
   "chat.tab.guild": "กิลด์",
