@@ -32,6 +32,10 @@ public sealed partial class Plugin
     private const float StickerThumbSize   = 56f;   // grid thumbnail px
     private const float StickerCellSize    = 64f;   // grid cell px (thumb + a little padding)
     private const float StickerTabSize     = 26f;   // category-tab icon px (small so ~13 tabs fit a row)
+    private const float StickerTabCell     = 32f;   // category-tab CELL px. ⚠ REQUIRED: BuildList gates the cellSize
+                                                    // override AND the FillWidth→Flexible flow on CellWidth>0. Without a
+                                                    // CellWidth the tab ListElement falls back to the 120px default grid
+                                                    // cell × MaxStickerCats cols → a ~1920px forced popover min-width.
     private const float StickerGridHeight  = 200f;  // scroll viewport height
 
     // Open state. Mutually exclusive with _quickOpen (see ToggleStickerPicker / ToggleQuickPhrases in Plugin.Composer.cs).
@@ -168,7 +172,8 @@ public sealed partial class Plugin
                 OnClick: () => OnPickCategory(idx),
                 Selected: () => _stickerCat == idx);
         }
-        return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats) { FillWidth = true };
+        return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats,
+            CellWidth: StickerTabCell, CellHeight: StickerTabCell) { FillWidth = true };
     }
 
     // Scrollable multi-column grid of the active category's thumbnails. Pre-allocated pool of MaxStickerSlots cells
