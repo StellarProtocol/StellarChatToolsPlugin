@@ -70,7 +70,10 @@ public sealed partial class Plugin
         var cats = new List<int>();
         foreach (var s in all)
         {
-            if (!s.DefaultUnlocked || s.Type == 5) continue;   // free only; QuickMessage is canned text, not an image
+            // Free only; QuickMessage (Type 5) is canned text. Drop GroupIds 1/2/4 — they render BLANK in our
+            // Res-texture picker: 1 = StandardEmoji (inline <sprite> atlas glyphs, no standalone texture),
+            // 2 = game-hidden "Emoji" atlas pack, 4 = game-hidden placeholder "Picture" pack (no usable texture).
+            if (!s.DefaultUnlocked || s.Type == 5 || s.GroupId is 1 or 2 or 4) continue;
             filtered.Add(s);
             if (!cats.Contains(s.GroupId)) cats.Add(s.GroupId);   // one tab per pack (GroupId), not per coarse Type
         }
