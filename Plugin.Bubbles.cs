@@ -54,8 +54,11 @@ public sealed partial class Plugin
     private string? _selfName;
 
     // Send round-trip learning: the text/channel we last dispatched, matched against the echoed inbound copy
-    // to discover our own SenderName/SenderId when the party roster isn't available (e.g. solo play).
+    // to discover our own SenderName/SenderId when the party roster isn't available (e.g. solo play). A send is
+    // EITHER a text send (match the echo by Text) OR a sticker send (match by StickerId) — never both pending at
+    // once, so each note clears the other kind.
     private string? _pendingSelfText;
+    private int _pendingSelfStickerId;   // 0 = no sticker send pending
     private ChatChannel _pendingSelfChannel;
     private DateTime _pendingSelfAt;
 
@@ -196,6 +199,17 @@ public sealed partial class Plugin
     private void NoteSelfSend(ChatChannel echoChannel, string text)
     {
         _pendingSelfText = text;
+        _pendingSelfStickerId = 0;   // only one pending kind active at a time (symmetry with NoteSelfSendSticker)
+        _pendingSelfChannel = echoChannel;
+        _pendingSelfAt = DateTime.UtcNow;
+    }
+
+    // Sticker sibling of NoteSelfSend: a sticker carries no text, so the echo is matched by StickerId instead.
+    // Clears _pendingSelfText so only one pending kind is ever active (symmetry with NoteSelfSend).
+    private void NoteSelfSendSticker(ChatChannel echoChannel, int stickerId)
+    {
+        _pendingSelfStickerId = stickerId;
+        _pendingSelfText = null;
         _pendingSelfChannel = echoChannel;
         _pendingSelfAt = DateTime.UtcNow;
     }
@@ -205,13 +219,19 @@ public sealed partial class Plugin
     private void LearnSelfFromEcho(ChatMessage msg)
     {
         if (_selfCharId != 0 && !string.IsNullOrEmpty(_selfName)) return;
-        if (msg.IsHistory || _pendingSelfText == null) return;
-        if (DateTime.UtcNow - _pendingSelfAt > TimeSpan.FromSeconds(6)) { _pendingSelfText = null; return; }
+        if (msg.IsHistory) return;
+        if (_pendingSelfText == null && _pendingSelfStickerId == 0) return;   // nothing pending to match against
+        if (DateTime.UtcNow - _pendingSelfAt > TimeSpan.FromSeconds(6)) { _pendingSelfText = null; _pendingSelfStickerId = 0; return; }
         if (msg.Channel != _pendingSelfChannel) return;
-        if (!string.Equals(msg.Text, _pendingSelfText, StringComparison.Ordinal)) return;
+
+        // Match a text send by its Text, or a sticker send by its StickerId (our echo carries back the configId we sent).
+        bool matches = (_pendingSelfText != null && string.Equals(msg.Text, _pendingSelfText, StringComparison.Ordinal))
+                    || (_pendingSelfStickerId != 0 && msg.StickerId == _pendingSelfStickerId);
+        if (!matches) return;
 
         if (!string.IsNullOrEmpty(msg.SenderName)) _selfName = msg.SenderName;
         if (msg.SenderId != 0) _selfCharId = msg.SenderId;
-        _pendingSelfText = null;   // learned (or consumed) — stop matching
+        _pendingSelfText = null;        // learned (or consumed) — stop matching either kind
+        _pendingSelfStickerId = 0;
     }
 }

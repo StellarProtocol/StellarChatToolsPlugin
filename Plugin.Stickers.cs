@@ -124,11 +124,14 @@ public sealed partial class Plugin
     }
 
     // Resolve the current composer target and send the sticker. Null target (e.g. Whisper with no reply picked) is a
-    // no-op, exactly like text (DoSend). NO NoteSelfSend: that echo-matches by TEXT and a sticker carries none, so
-    // self-detection falls back to the party roster / already-learned charId (Plugin.Bubbles.cs).
+    // no-op, exactly like text (DoSend). We DO note the send (by sticker id, not text — a sticker carries none): the
+    // echoed inbound copy carries back the same StickerId, so this teaches self-identity even on a fresh/solo session
+    // that hasn't sent any text yet (otherwise our own sticker renders left until the first text send). See
+    // NoteSelfSendSticker / LearnSelfFromEcho (Plugin.Bubbles.cs).
     private void SendSticker(int configId)
     {
         if (ResolveTarget() is not { } target) return;
+        NoteSelfSendSticker(SendChannel(), configId);   // .Bubbles.cs — learn our identity from the sticker echo
         _chat.SendSticker(target, configId);
     }
 
