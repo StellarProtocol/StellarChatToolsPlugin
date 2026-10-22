@@ -27,10 +27,11 @@ public sealed partial class Plugin
 
     // Recycled bubble pool size (K): ~viewport-worth of GameObjects, reused as you scroll (NOT display positions).
     // Sized for the log viewport at the window's MAX height (MaxHeight 1100 - title/tabs/composer/gaps ≈ 960px)
-    // ÷ the ~28px shortest bubble ≈ 34 rows worst-case, + buffer for partial rows / scroll velocity. 50 sits
-    // safely above the "pool too small -> top of viewport blanks" caveat and matches the framework's ~50-GameObject
-    // target (vs the old eager 200). Shrink only if profiling shows it matters.
-    private const int LogPoolSize = 50;
+    // ÷ the ~28px shortest bubble ≈ 34 rows worst-case, + buffer for partial rows / scroll velocity. 40 keeps a
+    // ~6-row margin over that 34 — safely above the "pool too small -> top of viewport blanks" caveat — while
+    // cutting 10 live bubble GameObjects (and their per-frame layout/draw) vs the old 50. Do NOT drop below ~40
+    // or the top of the viewport can blank at max height. Shrink further only if profiling shows it's safe.
+    private const int LogPoolSize = 40;
 
     // Edge-triggered one-shot for VirtualListElement.ResetScroll: SetActiveTab (.Tabs.cs) sets it on a tab change;
     // consumed+cleared on the next poll so the new filter re-pins to the bottom and re-measures row heights.

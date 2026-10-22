@@ -267,6 +267,8 @@ public sealed partial class Plugin
     // ---- Helpers ---------------------------------------------------------------------------------------------
 
     // Decode a PNG into a mipmap-free RGBA32 texture (resizes to the PNG on LoadImage). Null on any failure.
+    // Every avatar (per-player AND the shared default, which also resolves through here) is decoded via this one
+    // method, so the rounded-corner bake lives here once — covering all paths without double-baking.
     private static Texture2D? DecodePng(byte[]? bytes)
     {
         if (bytes == null || bytes.Length == 0) return null;
@@ -275,11 +277,55 @@ public sealed partial class Plugin
         {
             tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
             { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
-            if (ImageConversion.LoadImage(tex, bytes)) return tex;   // LoadImage uploads; no separate Apply needed
+            if (ImageConversion.LoadImage(tex, bytes))   // LoadImage uploads + leaves the texture readable
+            {
+                RoundCornersInPlace(tex);   // bake rounded-square corners into alpha → no per-row stencil Mask needed
+                return tex;
+            }
             SafeDestroy(tex);
             return null;
         }
         catch { if (tex != null) SafeDestroy(tex); return null; }
+    }
+
+    // Bake rounded-SQUARE corners into the texture's ALPHA so the chat bubble avatar needs NO per-item stencil Mask.
+    // Every live uGUI Mask is a UI-batch break + extra stencil draw calls EVERY drawn frame (the at-rest residual
+    // FPS cost); a baked alpha has none — the rounding is paid once here, on a tiny texture, at decode time. rPx
+    // scales the on-screen corner radius (AvatarCorner px at an AvatarSize-px display) into THIS texture's pixel
+    // space, so the curve matches the old stencil at any source PNG resolution. A ~1px coverage ramp across the arc
+    // keeps the edge anti-aliased (no hard stair-step), mirroring the stencil mask's smoothing. Texture stays RGBA32.
+    private static void RoundCornersInPlace(Texture2D tex)
+    {
+        int w = tex.width, h = tex.height;
+        if (w <= 2 || h <= 2) return;
+        float rPx = AvatarCorner * (Mathf.Min(w, h) / AvatarSize);
+        if (rPx < 0.5f) return;                               // radius rounds to nothing at this size — leave it square
+        int r = Mathf.Min(Mathf.CeilToInt(rPx), Mathf.Min(w, h) / 2);   // corner box side (clamped so boxes can't overlap)
+
+        var px = tex.GetPixels32();
+        // Each corner's quarter-circle arc centre is inset rPx from the two edges it touches; only the r×r corner
+        // boxes are visited (everything else keeps full alpha). (x,y) origin is bottom-left (GetPixels32 row order).
+        RoundCorner(px, w, 0,     0,     rPx,           rPx,           rPx, r);   // bottom-left
+        RoundCorner(px, w, w - r, 0,     (w - 1) - rPx, rPx,           rPx, r);   // bottom-right
+        RoundCorner(px, w, 0,     h - r, rPx,           (h - 1) - rPx, rPx, r);   // top-left
+        RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
+        tex.SetPixels32(px);
+        tex.Apply(false);   // re-upload; no mipmap regen (texture is mip-free)
+    }
+
+    // Multiply alpha by the quarter-circle coverage over one r×r corner box whose arc centre is (cx,cy), radius rad.
+    // Fully inside the arc → alpha untouched; fully outside → alpha 0; a ~1px linear ramp spans the boundary.
+    private static void RoundCorner(Color32[] px, int w, int x0, int y0, float cx, float cy, float rad, int r)
+    {
+        for (int y = y0; y < y0 + r; y++)
+        for (int x = x0; x < x0 + r; x++)
+        {
+            float dx = x - cx, dy = y - cy;
+            float cov = Mathf.Clamp01(rad + 0.5f - Mathf.Sqrt(dx * dx + dy * dy));
+            if (cov >= 1f) continue;                          // inside the arc → keep
+            int idx = y * w + x;
+            px[idx].a = (byte)(px[idx].a * cov);
+        }
     }
 
     private static bool IsPng(byte[]? b) =>

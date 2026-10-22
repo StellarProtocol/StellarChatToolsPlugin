@@ -82,11 +82,12 @@ public sealed partial class Plugin
 
     private HudElement BuildBubbleRow(int i, bool self)
     {
-        // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). Rounded-SQUARE via a small CornerRadius
-        // stencil mask (AvatarCorner — NOT AvatarSize/2, which would round all the way to a full circle). Everyone
-        // resolves to the shared default face until (and unless) their real photo loads.
+        // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). The rounded-SQUARE corners are BAKED
+        // into the texture's alpha at decode time (RoundCornersInPlace, driven by AvatarCorner) — so CornerRadius=0
+        // here (no per-row stencil Mask, which would break UI batching + add stencil draw calls every drawn frame).
+        // Everyone resolves to the shared default face until (and unless) their real photo loads.
         var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
-            { CornerRadius = (int)AvatarCorner };
+            { CornerRadius = 0 };
 
         // ⚠️ The sticker-vs-text ConditionalElement MUST wrap the WHOLE bubble — it must NEVER sit INSIDE the bubble's
         // measured child. BubbleBinding.Apply() hugs the bubble each tick by reading LayoutUtility.GetPreferredWidth(

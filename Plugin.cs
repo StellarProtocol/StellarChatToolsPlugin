@@ -70,6 +70,12 @@ public sealed partial class Plugin : IStellarPlugin
                     Style:       WindowPanelStyle.GlassMenu)
                 {
                     ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
+                    // Render on our OWN nested canvas (a uGUI batching boundary). The log is a ScrollRect: scrolling
+                    // moves its content every frame, which dirties + rebatches whatever canvas it lives on. On the
+                    // SHARED overlay canvas that re-batches EVERY window's graphics per render frame → an FPS drop
+                    // that scales with how many windows are open. Isolated, a scroll rebuilds only THIS window's
+                    // batch. overrideSorting stays false, so BringToFront / layout z-order still work normally.
+                    IsolateCanvas = true,
                     Closable = true,
                     Draggable = true,
                     // Resizable turns OFF vertical content auto-fit; the body's ScrollElement (flexibleHeight=1)
