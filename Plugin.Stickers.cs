@@ -10,11 +10,12 @@ namespace Stellar.ChatTools;
 /// grid (no localized category labels): representative-icon category tabs over a scrollable multi-column grid of the
 /// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker.
 ///
-/// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0), filtered to FREE
-/// (<see cref="StickerInfo.DefaultUnlocked"/>) stickers only — v1 sidesteps the server rejecting unowned gated
-/// stickers — and EXCLUDING <c>Type == 5</c> (QuickMessage: canned text, covered by the plugin's own quick phrases).
-/// Types 1–4 (StandardEmoji / Emoji / Picture / HeadPicture) are kept. Thumbnails load via
-/// <see cref="IGameAssets.LoadStickerIcon"/> (cached); sends go through <see cref="IChat.SendSticker"/>.
+/// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0). Shows ALL stickers — free AND
+/// gated (we no longer filter on <see cref="StickerInfo.DefaultUnlocked"/>) — EXCLUDING only <c>Type == 5</c>
+/// (QuickMessage: canned text, covered by the plugin's own quick phrases) and the blank GroupIds 1/2/4. Thumbnails
+/// load via <see cref="IGameAssets.LoadStickerIcon"/> (cached); sends go through <see cref="IChat.SendSticker"/>.
+/// ⚠️ Tradeoff: a GATED sticker the account hasn't actually unlocked may be rejected server-side on send (nothing
+/// appears for recipients); accepted so owned gated packs are usable without a per-account ownership probe.
 ///
 /// Mutual exclusion: opening the sticker picker closes the quick-phrase popover and vice-versa (<see cref="_stickerOpen"/>
 /// / <see cref="Plugin._quickOpen"/>).
@@ -27,7 +28,7 @@ public sealed partial class Plugin
 {
     private const int   MaxStickerSlots    = 128;   // pre-allocated grid cells (element tree is fixed at Register);
                                                     // must be >= the largest single group (per-GroupId now; was ~98 by Type)
-    private const int   MaxStickerCats     = 16;    // one tab per GroupId (pack); ~13 distinct free non-QuickMessage groups
+    private const int   MaxStickerCats     = 16;    // one tab per GroupId (pack); ~13 distinct non-QuickMessage groups
     private const int   StickerGridColumns = 6;     // advisory min under the Flexible/FillWidth grid (ignored when flowing)
     private const float StickerThumbSize   = 56f;   // grid thumbnail px
     private const float StickerCellSize    = 64f;   // grid cell px (thumb + a little padding)
@@ -42,7 +43,7 @@ public sealed partial class Plugin
     private bool _stickerOpen;
     private int  _stickerCat;   // index into StickerCategories() (NOT the raw GroupId)
 
-    // Filtered catalog (free, non-QuickMessage), cached once non-empty, plus the distinct GroupIds present (sorted).
+    // Filtered catalog (free + gated, non-QuickMessage), cached once non-empty, plus the distinct GroupIds present (sorted).
     // The game's chat emoji panel tabs by GroupId (pack) — each tab = one GroupId — so we group by GroupId, NOT by the
     // coarse Type (which lumped every pack of a Type into one giant tab). Both rebuild while empty so a pre-table-load
     // open retries on the next open (GetSendableStickers is itself framework-cached once populated). Active-category
@@ -59,8 +60,9 @@ public sealed partial class Plugin
     }
 
     // Populate _stickerCatalog + _stickerCats once the table has loaded. Returns false (no cache) while the catalog
-    // is still empty so a later open retries. Filters to FREE stickers and drops QuickMessage (Type 5). Category tabs
-    // are the distinct GroupIds (packs) present, sorted ascending — mirrors the game's chat emoji panel.
+    // is still empty so a later open retries. Shows both free and gated stickers; drops QuickMessage (Type 5) and the
+    // blank GroupIds 1/2/4. Category tabs are the distinct GroupIds (packs) present, sorted ascending — mirrors the
+    // game's chat emoji panel.
     private bool EnsureStickerCatalog()
     {
         if (_stickerCatalog is { Count: > 0 }) return true;
@@ -70,10 +72,11 @@ public sealed partial class Plugin
         var cats = new List<int>();
         foreach (var s in all)
         {
-            // Free only; QuickMessage (Type 5) is canned text. Drop GroupIds 1/2/4 — they render BLANK in our
-            // Res-texture picker: 1 = StandardEmoji (inline <sprite> atlas glyphs, no standalone texture),
-            // 2 = game-hidden "Emoji" atlas pack, 4 = game-hidden placeholder "Picture" pack (no usable texture).
-            if (!s.DefaultUnlocked || s.Type == 5 || s.GroupId is 1 or 2 or 4) continue;
+            // Both free and gated stickers are shown. QuickMessage (Type 5) is canned text (covered by quick
+            // phrases). Drop GroupIds 1/2/4 — they render BLANK in our Res-texture picker: 1 = StandardEmoji (inline
+            // <sprite> atlas glyphs, no standalone texture), 2 = game-hidden "Emoji" atlas pack, 4 = game-hidden
+            // placeholder "Picture" pack (no usable texture).
+            if (s.Type == 5 || s.GroupId is 1 or 2 or 4) continue;
             filtered.Add(s);
             if (!cats.Contains(s.GroupId)) cats.Add(s.GroupId);   // one tab per pack (GroupId), not per coarse Type
         }
