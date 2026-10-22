@@ -5,10 +5,10 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// Channel READ-tabs — a NEW concept distinct from the composer's send-target. A row of underline tabs filters
-/// the log to one <see cref="ChatChannel"/> bucket (All = no filter; Current = Say). The active tab is marked by
-/// an accent underline; tabs with messages newer than last-viewed show an unread dot. History-replay messages
-/// (<see cref="ChatMessage.IsHistory"/>) never count as unread.
+/// Channel READ-tabs — a NEW concept distinct from the composer's send-target. A segmented-pill tab bar filters
+/// the log to one <see cref="ChatChannel"/> bucket (All = no filter; Current = Say). The active tab is a filled
+/// accent pill in a recessed track; tabs with messages newer than last-viewed show an unread dot. History-replay
+/// messages (<see cref="ChatMessage.IsHistory"/>) never count as unread.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -89,32 +89,24 @@ public sealed partial class Plugin
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
     }
 
-    // Uniform tab width (canvas px) so the strip reads as an even row of tabs, not label-sized chips that jitter as
-    // the active-label width changes. Each tab is a SelectableElement pinned to this width by a CellElement; the
-    // Selectable's VLG adds ~6px of h-padding each side, so the content area ≈ TabWidth−12px at the 11px menu font —
-    // room for the WIDEST label ("Whisper"/"Current") PLUS the " •" unread suffix. An over-long label WRAPS rather
-    // than clips (NoWrap left off). Every tab reserves the SAME label+gap+underline height, so active vs inactive
-    // differ only in the underline COLOUR, never in layout — a tab never changes height. NB: 7 tabs × this width
-    // (≈516px incl. 2px gaps) exceeds the 440px default window, so the strip overflows a narrow window rather than
-    // shrinking a tab below its label — the user runs the window wide.
-    private const float TabWidth = 72f;
-
-    // Resting (inactive) underline alpha, applied to MenuMuted — faint but visible, so every tab reads as a tab
-    // rather than plain text. The ACTIVE tab swaps this faint line for the full-strength MenuAccent.
-    private const float InactiveUnderlineAlpha = 0.35f;
-
-    // The tab strip: All · World · Current · Party · Guild · Whisper · System — a classic underline tab-bar. (UX
-    // feedback on the prior flat-tab version: inactive tabs were too dim and gave no "this is a tab" cue, and the
-    // active underline sat right under the label.) Each tab is now an explicit COLUMN — a centred label, a 5px
-    // SpacerElement gap, then a 3px underline BarElement present on EVERY tab — so the whole row reads as a tab
-    // strip. Text is bright/white (MenuText) on ALL tabs, active AND inactive (never dimmed); the active tab is
-    // distinguished by its underline alone — MenuAccent when active, a faint MenuMuted (alpha
-    // InactiveUnderlineAlpha) at rest. The column is wrapped in a SelectableElement (NO SelectedBar — the per-tab
-    // BarElement IS the indicator) so a click anywhere on the tab fires SetActiveTab, and the active tab also gets
-    // the Selectable's subtle accent pill tint as an extra cue. Label, the unread " •" suffix, text colour and the
-    // underline colour all resolve at draw time (the underline via BarElement.FillColorFn, honoured on the Default
-    // bar path), so a live language switch, live unread, a live theme change, and the active-tab move all show
-    // without an element-tree rebuild. CellElement pins each tab to TabWidth (uniform strip).
+    // The tab strip: All · World · Current · Party · Guild · Whisper · System — rendered as a SEGMENTED-PILL control
+    // (replaces the old underline/column design). The whole row sits in a recessed rounded BubbleElement "track" —
+    // the same darker-fill treatment the sticker picker uses for its tab strip, so the two strips read as one
+    // window. Each tab is an EQUAL-WIDTH segment: a CellElement with Weight:1 (NOT a fixed Width), so all 7 tabs
+    // split the bar evenly and shrink to fit ANY window width — they can never overflow, and there is no "run the
+    // window wide" caveat any more. The active tab is a filled accent pill; inactive tabs are transparent segments
+    // with legible MUTED text. (Inactive text stays clearly readable on purpose — the whole redesign is to stop
+    // inactive tabs reading as dead, un-clickable text, so they are MenuMuted, not dropped to a near-invisible alpha.)
+    //
+    // Each segment: CellElement(Weight:1) → SelectableElement (click = SetActiveTab, Selected = active) → a
+    // BubbleElement holding a centred label. The pill FILL spans the full segment (rather than hugging the label)
+    // because both CellElement and the SelectableElement host force-expand their child's width (WindowBuilder-
+    // Patterns.md "force-expand"); the 7 filled segments then read as one continuous segmented control inside the
+    // track. The fill colour resolves per-draw via the framework's new BubbleElement.FillColorFn — MenuAccent when
+    // the tab is active, a fully-transparent ColorRgba otherwise (an explicit transparent, NOT null — null would
+    // fall back to the bubble's themed default accent fill). Label text, the unread " •" suffix and the text colour
+    // (bright MenuText on the active pill, MenuMuted elsewhere) all resolve through ()=> funcs, so a live language /
+    // theme / unread / active-tab change shows with no element-tree rebuild (the tree is built once — see Plugin.cs).
     private HudElement BuildTabBar()
     {
         var cells = new List<HudElement>(Tabs.Length);
@@ -123,34 +115,28 @@ public sealed partial class Plugin
             var tab = t;   // capture
             cells.Add(new CellElement(
                 new SelectableElement(
-                    new ColumnElement(new HudElement[]
-                    {
+                    new BubbleElement(
                         new TextElement(
                             () => HasUnread(tab) ? _loc.T(TabLabelKey(tab)) + " •" : _loc.T(TabLabelKey(tab)),
-                            () => _services.Theme.Colors.MenuText,   // bright/white on every tab — never dimmed
-                            Align: TextAlign.Center),
-                        new SpacerElement(Height: 5f),               // "pad it more" — gap between label and underline
-                        // Underline on EVERY tab (the "this is a tab" affordance): FillWidth spans the cell; the
-                        // colour resolves per-tab at draw time — accent when active, faint muted at rest. Fill (the
-                        // static ctor arg) is only a fallback; FillColorFn is what the Default bar path actually uses.
-                        new BarElement(() => 1f, _services.Theme.Colors.MenuAccent)
-                        {
-                            Height = 3f,
-                            FillWidth = true,
-                            FillColorFn = () => _activeTab == tab
-                                ? _services.Theme.Colors.MenuAccent
-                                : FaintUnderline(_services.Theme.Colors.MenuMuted),
-                        },
-                    }, Gap: 0f),
+                            () => _activeTab == tab
+                                ? _services.Theme.Colors.MenuText     // bright white on the accent pill
+                                : _services.Theme.Colors.MenuMuted,   // legible muted on the transparent segment
+                            Align: TextAlign.Center))
+                    {
+                        CornerRadius = 8f, PaddingX = 4f, PaddingY = 7f,
+                        // The pill itself: accent fill when active, transparent otherwise. Returning an explicit
+                        // transparent (NOT null) is required — null falls back to the bubble's themed default fill.
+                        FillColorFn = () => _activeTab == tab
+                            ? _services.Theme.Colors.MenuAccent
+                            : new ColorRgba(0f, 0f, 0f, 0f),
+                    },
                     OnClick: () => SetActiveTab(tab),
-                    Selected: () => _activeTab == tab),   // subtle accent pill on the active tab; NO SelectedBar
-                Width: TabWidth));
+                    Selected: () => _activeTab == tab),   // Selectable's own accent tint under the pill, as an extra cue
+                Weight: 1f));
         }
-        return new RowElement(cells.ToArray(), Gap: 2f);
+        // Recessed track: the whole row in a subtly-darker rounded bubble (the sticker picker's tab-strip treatment).
+        // Dropped into BuildRoot's Column it force-expands to the full window width; the Weight:1 cells then split it.
+        return new BubbleElement(new RowElement(cells.ToArray(), Gap: 3f))
+            { FillColor = new ColorRgba(0f, 0f, 0f, 0.18f), CornerRadius = 10f, PaddingX = 4f, PaddingY = 4f };
     }
-
-    // Faint resting-underline colour = the theme's muted token dropped to InactiveUnderlineAlpha. Takes the live
-    // token so a theme change tracks.
-    private static ColorRgba FaintUnderline(ColorRgba muted)
-        => new(muted.R, muted.G, muted.B, muted.A * InactiveUnderlineAlpha);
 }
