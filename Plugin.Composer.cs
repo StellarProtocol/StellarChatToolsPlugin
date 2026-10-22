@@ -73,7 +73,7 @@ public sealed partial class Plugin
                 new ButtonElement(() => "＋", ToggleQuickPhrases, Active: () => _quickOpen, Width: 30f),
                 // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs).
                 new ButtonElement(() => "☺", ToggleStickerPicker, Active: () => _stickerOpen, Width: 30f),
-                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput), Weight: 1f),
+                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput) { AutoFocus = true }, Weight: 1f),
                 new TextElement(() => CharCounter(), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
                 new ButtonElement(() => _loc.T("chat.send"), DoSend),
             }, Gap: 4f),
