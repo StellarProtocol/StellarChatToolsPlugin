@@ -10,12 +10,13 @@ namespace Stellar.ChatTools;
 /// grid (no localized category labels): representative-icon category tabs over a scrollable multi-column grid of the
 /// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker.
 ///
-/// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0). Shows ALL stickers — free AND
-/// gated (we no longer filter on <see cref="StickerInfo.DefaultUnlocked"/>) — EXCLUDING only <c>Type == 5</c>
-/// (QuickMessage: canned text, covered by the plugin's own quick phrases) and the blank GroupIds 1/2/4. Thumbnails
-/// load via <see cref="IGameAssets.LoadStickerIcon"/> (cached); sends go through <see cref="IChat.SendSticker"/>.
-/// ⚠️ Tradeoff: a GATED sticker the account hasn't actually unlocked may be rejected server-side on send (nothing
-/// appears for recipients); accepted so owned gated packs are usable without a per-account ownership probe.
+/// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0). Shows FREE + OWNED stickers:
+/// a row is kept when it is free (<see cref="StickerInfo.DefaultUnlocked"/>) OR the account owns the gated pack
+/// (<see cref="IGameAssets.IsStickerOwned"/>, the game's own <c>GetChatEmojiUnlock</c> predicate via Lua) —
+/// unowned gated stickers are HIDDEN, since the server rejects sending them (nothing would appear for recipients).
+/// Also EXCLUDES <c>Type == 5</c> (QuickMessage: canned text, covered by the plugin's own quick phrases) and the
+/// blank GroupIds 1/2/4. Thumbnails load via <see cref="IGameAssets.LoadStickerIcon"/> (cached); sends go through
+/// <see cref="IChat.SendSticker"/>.
 ///
 /// Mutual exclusion: opening the sticker picker closes the quick-phrase popover and vice-versa (<see cref="_stickerOpen"/>
 /// / <see cref="Plugin._quickOpen"/>).
@@ -30,14 +31,15 @@ public sealed partial class Plugin
                                                     // must be >= the largest single group (per-GroupId now; was ~98 by Type)
     private const int   MaxStickerCats     = 16;    // one tab per GroupId (pack); ~13 distinct non-QuickMessage groups
     private const int   StickerGridColumns = 6;     // advisory min under the Flexible/FillWidth grid (ignored when flowing)
-    private const float StickerThumbSize   = 56f;   // grid thumbnail px
-    private const float StickerCellSize    = 64f;   // grid cell px (thumb + a little padding)
-    private const float StickerTabSize     = 26f;   // category-tab icon px (small so ~13 tabs fit a row)
-    private const float StickerTabCell     = 32f;   // category-tab CELL px. ⚠ REQUIRED: BuildList gates the cellSize
+    private const float StickerThumbSize   = 64f;   // grid thumbnail px (bigger — Option A redesign)
+    private const float StickerCellSize    = 72f;   // grid cell px (thumb + a little padding)
+    private const float StickerTabSize     = 32f;   // category-tab icon px (bigger tabs — Option A redesign)
+    private const float StickerTabCell     = 40f;   // category-tab CELL px. ⚠ REQUIRED: BuildList gates the cellSize
                                                     // override AND the FillWidth→Flexible flow on CellWidth>0. Without a
                                                     // CellWidth the tab ListElement falls back to the 120px default grid
                                                     // cell × MaxStickerCats cols → a ~1920px forced popover min-width.
-    private const float StickerGridHeight  = 200f;  // scroll viewport height
+    private const float StickerGridHeight  = 150f;  // scroll viewport height — ~2 rows of StickerCellSize cells; the
+                                                    // recessed tab strip sits above it (Option A)
 
     // Open state. Mutually exclusive with _quickOpen (see ToggleStickerPicker / ToggleQuickPhrases in Plugin.Composer.cs).
     private bool _stickerOpen;
@@ -60,9 +62,10 @@ public sealed partial class Plugin
     }
 
     // Populate _stickerCatalog + _stickerCats once the table has loaded. Returns false (no cache) while the catalog
-    // is still empty so a later open retries. Shows both free and gated stickers; drops QuickMessage (Type 5) and the
-    // blank GroupIds 1/2/4. Category tabs are the distinct GroupIds (packs) present, sorted ascending — mirrors the
-    // game's chat emoji panel.
+    // is still empty so a later open retries. Shows FREE + OWNED stickers (unowned gated ones are hidden — the
+    // server rejects sending them); drops QuickMessage (Type 5) and the blank GroupIds 1/2/4. Category tabs are the
+    // distinct GroupIds (packs) present, sorted ascending — mirrors the game's chat emoji panel. A pack the account
+    // owns none of simply gets no tab (so the owned filter needs no "nothing here" message).
     private bool EnsureStickerCatalog()
     {
         if (_stickerCatalog is { Count: > 0 }) return true;
@@ -72,11 +75,14 @@ public sealed partial class Plugin
         var cats = new List<int>();
         foreach (var s in all)
         {
-            // Both free and gated stickers are shown. QuickMessage (Type 5) is canned text (covered by quick
-            // phrases). Drop GroupIds 1/2/4 — they render BLANK in our Res-texture picker: 1 = StandardEmoji (inline
-            // <sprite> atlas glyphs, no standalone texture), 2 = game-hidden "Emoji" atlas pack, 4 = game-hidden
-            // placeholder "Picture" pack (no usable texture).
+            // QuickMessage (Type 5) is canned text (covered by quick phrases). Drop GroupIds 1/2/4 — they render
+            // BLANK in our Res-texture picker: 1 = StandardEmoji (inline <sprite> atlas glyphs, no standalone
+            // texture), 2 = game-hidden "Emoji" atlas pack, 4 = game-hidden placeholder "Picture" pack (no usable
+            // texture).
             if (s.Type == 5 || s.GroupId is 1 or 2 or 4) continue;
+            // Keep only stickers we can actually SEND: free ones, or gated ones the account owns. Short-circuit on
+            // DefaultUnlocked so the (Lua) ownership probe runs ONLY for the gated minority (fail-closed → hidden).
+            if (!(s.DefaultUnlocked || _services.GameAssets.IsStickerOwned(s.ConfigId))) continue;
             filtered.Add(s);
             if (!cats.Contains(s.GroupId)) cats.Add(s.GroupId);   // one tab per pack (GroupId), not per coarse Type
         }
@@ -153,16 +159,25 @@ public sealed partial class Plugin
         // Loading / not-yet-populated state (table loads lazily at boot). The ONLY user-facing text in the picker.
         new ConditionalElement(() => StickerCategories().Count == 0,
             new TextElement(() => _loc.T("chat.sticker.loading"), () => _services.Theme.Colors.MenuMuted)),
-        BuildCategoryTabs(),
+        // Option A — a recessed control strip on top, separated from the grid below:
+        //  • the category tabs sit in a subtly-darker rounded BubbleElement so the strip reads apart from the grid
+        //    (dropped straight into this Column, the bubble fills the full width rather than hugging — the
+        //    documented Column-vs-Row behaviour);
+        //  • a hairline SeparatorElement divides the strip from the grid (the core separation);
+        //  • the active tab is marked by the SelectableElement pill + a thin accent underline bar (BuildCategoryTabs).
+        new BubbleElement(BuildCategoryTabs())
+            { FillColor = new ColorRgba(0f, 0f, 0f, 0.18f), CornerRadius = 8f, PaddingX = 4f, PaddingY = 4f },
+        new SeparatorElement(),
         // FixedHeight: pin the grid at StickerGridHeight so it does NOT grow when the chat window is resized —
         // all slack height stays with the log's scroll instead (framework ScrollElement.FixedHeight).
         new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true },
     }, Gap: 4f));
 
     // Representative-icon category tabs (one per GroupId/pack, icon-only — no localized labels). A tab shows its
-    // group's first sticker; SelectableElement.Selected highlights the active one. The icon is wrapped in a centred
-    // RowElement so the Selectable/grid cell's width force-expand doesn't squish the square thumbnail
-    // (WindowBuilder-Patterns.md). FillWidth lets the ~13-tab strip flow/wrap in a narrow window instead of overflowing.
+    // group's first sticker; SelectableElement.Selected highlights the active one with the accent pill, and
+    // SelectedBar adds a thin accent underline bar under the active tab (Option A "active tab" indicator). The icon
+    // is wrapped in a centred RowElement so the Selectable/grid cell's width force-expand doesn't squish the square
+    // thumbnail (WindowBuilder-Patterns.md). FillWidth lets the ~13-tab strip flow/wrap in a narrow window.
     private HudElement BuildCategoryTabs()
     {
         var slots = new HudElement[MaxStickerCats];
@@ -178,7 +193,7 @@ public sealed partial class Plugin
                         () => { var id = CategoryIconId(idx); if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); }),
                 }, Justify: RowJustify.Center),
                 OnClick: () => OnPickCategory(idx),
-                Selected: () => _stickerCat == idx);
+                Selected: () => _stickerCat == idx) { SelectedBar = true };
         }
         return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats,
             CellWidth: StickerTabCell, CellHeight: StickerTabCell) { FillWidth = true };
