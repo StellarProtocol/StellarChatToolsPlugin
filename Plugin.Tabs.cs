@@ -5,9 +5,9 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// Channel READ-tabs — a NEW concept distinct from the composer's send-target. A row of tab buttons filters
-/// the log to one <see cref="ChatChannel"/> bucket (All = no filter; Current = Say). The active tab is
-/// highlighted; tabs with messages newer than last-viewed show an unread dot. History-replay messages
+/// Channel READ-tabs — a NEW concept distinct from the composer's send-target. A row of flat tabs filters
+/// the log to one <see cref="ChatChannel"/> bucket (All = no filter; Current = Say). The active tab is marked by
+/// an accent underline; tabs with messages newer than last-viewed show an unread dot. History-replay messages
 /// (<see cref="ChatMessage.IsHistory"/>) never count as unread.
 /// </summary>
 public sealed partial class Plugin
@@ -89,39 +89,42 @@ public sealed partial class Plugin
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
     }
 
-    // Cyan accent under the tab strip (matches the game's segmented-tab underline). A full-width 3px bar; the
-    // SDK has no colour-bindable line primitive, so BarElement at fraction 1.0 with a fixed cyan fill is the
-    // closest — see the escalation report (a per-tab underline would need a new framework element).
-    private static readonly ColorRgba TabAccent = new(0.30f, 0.82f, 1f, 0.95f);
-
-    // Uniform tab width (canvas px) so the strip reads as an even segmented bar, not a row of label-sized chips.
-    // Sized to fit the WIDEST label — "Whisper"/"Current" (and a "World ▾" caret) PLUS the " •" unread suffix —
-    // inside the button's fixed-width box: a ButtonElement's content area is Width minus 18px of HLG padding (9px
-    // each side) at the 11px menu font, and an over-long label WRAPS to a 2nd line (it does not clip), so the width
-    // leaves a few px of slack to keep every tab one line tall. NB: 7 tabs × this width (≈516px incl. 2px gaps)
-    // exceeds the 440px default window, so the strip overflows a narrow window rather than shrinking a tab below its
-    // label — the user runs the window wide. The active-tab cyan accent and unread dots are width-independent.
+    // Uniform tab width (canvas px) so the strip reads as an even row of tabs, not label-sized chips that jitter as
+    // the active-label width changes. Each tab is a SelectableElement pinned to this width by a CellElement; the
+    // Selectable's VLG adds ~6px of h-padding each side, so the content area ≈ TabWidth−12px at the 11px menu font —
+    // room for the WIDEST label ("Whisper"/"Current") PLUS the " •" unread suffix. An over-long label WRAPS rather
+    // than clips (NoWrap left off), and SelectedBar is overlaid (ignores layout), so the active underline never
+    // changes a tab's height. NB: 7 tabs × this width (≈516px incl. 2px gaps) exceeds the 440px default window, so
+    // the strip overflows a narrow window rather than shrinking a tab below its label — the user runs the window wide.
     private const float TabWidth = 72f;
 
-    // The tab strip: All · World · Current · Party · Guild · Whisper · System, over the cyan accent line.
-    // Active tab highlighted (ButtonElement.Active → accent fill); a trailing bullet marks unread. Labels +
-    // the dot resolve at draw time, so a live language switch and live unread state both show without a rebuild.
+    // The tab strip: All · World · Current · Party · Guild · Whisper · System — FLAT tabs, not buttons. Each tab is a
+    // SelectableElement (no fill box) wrapping a centred label; the ACTIVE tab is marked by SelectedBar — a ~3px
+    // theme-accent underline overlaid under that one cell (replaces the old single full-width cyan BarElement) — plus
+    // an accent label colour (MenuAccent active / MenuMuted inactive, the theme's documented pill-tab convention).
+    // A single neutral SeparatorElement gives the whole strip a hairline baseline above the log. Labels, the unread
+    // dot, and active state all resolve at draw time, so a live language switch and live unread both show without a
+    // rebuild. CellElement pins each tab to TabWidth (uniform strip); SelectedBar is the per-tab active underline.
     private HudElement BuildTabBar()
     {
-        var buttons = new List<HudElement>(Tabs.Length);
+        var cells = new List<HudElement>(Tabs.Length);
         foreach (var t in Tabs)
         {
             var tab = t;   // capture
-            buttons.Add(new ButtonElement(
-                () => HasUnread(tab) ? _loc.T(TabLabelKey(tab)) + " •" : _loc.T(TabLabelKey(tab)),
-                () => SetActiveTab(tab),
-                Active: () => _activeTab == tab,
+            cells.Add(new CellElement(
+                new SelectableElement(
+                    new TextElement(
+                        () => HasUnread(tab) ? _loc.T(TabLabelKey(tab)) + " •" : _loc.T(TabLabelKey(tab)),
+                        () => _activeTab == tab ? _services.Theme.Colors.MenuAccent : _services.Theme.Colors.MenuMuted,
+                        Align: TextAlign.Center),
+                    OnClick: () => SetActiveTab(tab),
+                    Selected: () => _activeTab == tab) { SelectedBar = true },
                 Width: TabWidth));
         }
         return new ColumnElement(new HudElement[]
         {
-            new RowElement(buttons.ToArray(), Gap: 2f),
-            new BarElement(() => 1f, TabAccent) { Height = 3f, FillWidth = true },
+            new RowElement(cells.ToArray(), Gap: 2f),
+            new SeparatorElement(),   // neutral hairline baseline under the strip (NOT the active indicator)
         }, Gap: 2f);
     }
 }

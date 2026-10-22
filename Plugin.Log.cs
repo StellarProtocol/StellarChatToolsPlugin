@@ -57,7 +57,7 @@ public sealed partial class Plugin
             });
 
         _sayColor     = Slot("ChatTools.Channel.Say",     "chat.color.say",     new ColorRgba(0.86f, 0.90f, 0.92f), new ColorRgba(0.20f, 0.24f, 0.28f));
-        _worldColor   = Slot("ChatTools.Channel.World",   "chat.color.world",   new ColorRgba(0.90f, 0.85f, 1.00f), new ColorRgba(0.42f, 0.28f, 0.66f));
+        _worldColor   = Slot("ChatTools.Channel.World",   "chat.color.world",   new ColorRgba(0.70f, 0.52f, 1.00f), new ColorRgba(0.42f, 0.28f, 0.66f));
         _partyColor   = Slot("ChatTools.Channel.Party",   "chat.color.party",   new ColorRgba(0.40f, 0.85f, 1.00f), new ColorRgba(0.07f, 0.42f, 0.66f));
         _guildColor   = Slot("ChatTools.Channel.Guild",   "chat.color.guild",   new ColorRgba(0.55f, 0.90f, 0.55f), new ColorRgba(0.14f, 0.46f, 0.16f));
         _whisperColor = Slot("ChatTools.Channel.Whisper", "chat.color.whisper", new ColorRgba(0.85f, 0.50f, 1.00f), new ColorRgba(0.52f, 0.18f, 0.72f));
