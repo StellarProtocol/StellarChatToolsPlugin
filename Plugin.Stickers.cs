@@ -151,7 +151,9 @@ public sealed partial class Plugin
         new ConditionalElement(() => StickerCategories().Count == 0,
             new TextElement(() => _loc.T("chat.sticker.loading"), () => _services.Theme.Colors.MenuMuted)),
         BuildCategoryTabs(),
-        new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight),
+        // FixedHeight: pin the grid at StickerGridHeight so it does NOT grow when the chat window is resized —
+        // all slack height stays with the log's scroll instead (framework ScrollElement.FixedHeight).
+        new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true },
     }, Gap: 4f));
 
     // Representative-icon category tabs (one per GroupId/pack, icon-only — no localized labels). A tab shows its
