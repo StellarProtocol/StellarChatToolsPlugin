@@ -130,8 +130,11 @@ public sealed partial class Plugin
                             ? _services.Theme.Colors.MenuAccent
                             : new ColorRgba(0f, 0f, 0f, 0f),
                     },
-                    OnClick: () => SetActiveTab(tab),
-                    Selected: () => _activeTab == tab),   // Selectable's own accent tint under the pill, as an extra cue
+                    // No Selected: arg — the BubbleElement.FillColorFn pill is the SOLE active indicator. Passing
+                    // Selected here made the Selectable draw its OWN "stronger accent fill" behind the pill too, so the
+                    // active tab rendered two overlapping accent layers (the doubled-pill look, magenta bleeding below/
+                    // left). Hover feedback is unaffected — the Selectable's hover wash is independent of Selected.
+                    OnClick: () => SetActiveTab(tab)),
                 Weight: 1f));
         }
         // Recessed track: the whole row in a subtly-darker rounded bubble (the sticker picker's tab-strip treatment).
