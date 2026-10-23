@@ -253,11 +253,23 @@ public sealed partial class Plugin
     // appearing never re-flows the label — only a fixed ~10 px is reserved, which the tightened bubble PaddingX (4 → 2)
     // mostly pays for at the 360 px minimum window width. This Cond IS inside the bubble, but both branches report the
     // same width, so the bubble's measured width cannot swing when it toggles.
-    private HudElement BuildTabLabel(ChatTab tab, bool active) => new RowElement(new HudElement[]
+    //
+    // The ACTIVE variant gets NO dot slot: its channel is the one being viewed, so HasUnread is always false for it
+    // (SetActiveTab / NoteIncoming keep its last-seen current). Reserving the slot there pushed the bold label ~5 px
+    // left of the pill's centre. Dropping it can't shift neighbours — the segment width comes from the Weight:1 cell,
+    // not from this content.
+    private HudElement BuildTabLabel(ChatTab tab, bool active)
     {
-        new TextElement(() => _loc.T(TabLabelKey(tab)),
+        var label = new TextElement(() => _loc.T(TabLabelKey(tab)),
             active ? () => TabActiveText(tab) : () => TabMutedText(tab),
-            Emphasis: active, Align: TextAlign.Center),
+            Emphasis: active, Align: TextAlign.Center);
+        if (active) return new RowElement(new HudElement[] { label }, Justify: RowJustify.Center);
+        return BuildInactiveTabLabel(tab, label);
+    }
+
+    private HudElement BuildInactiveTabLabel(ChatTab tab, HudElement label) => new RowElement(new HudElement[]
+    {
+        label,
         new ConditionalElement(() => HasUnread(tab),
             new ColumnElement(new HudElement[]
             {
