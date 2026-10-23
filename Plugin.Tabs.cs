@@ -241,7 +241,10 @@ public sealed partial class Plugin
         }
         // Recessed track: the whole row in a subtly-darker rounded bubble (the sticker picker's tab-strip treatment).
         // Dropped into BuildRoot's Column it force-expands to the full window width; the Weight:1 cells then split it.
-        return new BubbleElement(new RowElement(cells.ToArray(), Gap: 3f))
+        // ConstrainsWindowMinWidth: the window can't be resized narrower than the tabs' natural width in the CURRENT
+        // language (≈622 en / ≈689 fil at 2560x1440), and a saved narrower layout is widened on open — no
+        // per-language MinWidth table. The pills inside then hug their natural width rather than squeezing.
+        return new BubbleElement(new RowElement(cells.ToArray(), Gap: 3f) { ConstrainsWindowMinWidth = true })
             { FillColor = TabTrackFill, CornerRadius = 10f, PaddingX = 4f, PaddingY = 4f };
     }
 

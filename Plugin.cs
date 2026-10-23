@@ -81,6 +81,8 @@ public sealed partial class Plugin : IStellarPlugin
                     // Resizable turns OFF vertical content auto-fit; the body's ScrollElement (flexibleHeight=1)
                     // absorbs the freed height so the log grows with the window (WindowBuilder BuildScroll).
                     Resizable = true,
+                    // 480 is only a FLOOR: the real minimum width comes from content — the tab row and composer rows
+                    // are RowElement.ConstrainsWindowMinWidth, so it follows the current language's natural widths.
                     MinWidth = 480f, MinHeight = 260f,
                     MaxWidth = 1000f, MaxHeight = 1100f,
                 },

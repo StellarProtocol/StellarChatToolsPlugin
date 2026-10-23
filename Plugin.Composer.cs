@@ -58,7 +58,7 @@ public sealed partial class Plugin
                 new DropdownElement(() => _sendTargetIndex, TargetOptions, OnPickTarget, Width: 120f),
                 new SpacerElement(),
                 new ButtonElement(() => _loc.T("chat.settings.button"), ToggleSettings, Active: () => _settingsOpen),
-            }, Gap: 6f),
+            }, Gap: 6f) { ConstrainsWindowMinWidth = true },   // never narrower than this row needs (any language)
 
             // Whisper reply state: who we're replying to (+ cancel), or a hint to pick a whisper row.
             new ConditionalElement(() => _sendTargetIndex == 4 && _replyTarget != null, new RowElement(new HudElement[]
@@ -79,7 +79,9 @@ public sealed partial class Plugin
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput) { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq }, Weight: 1f),
                 new TextElement(() => CharCounter(), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
                 new ButtonElement(() => _loc.T("chat.send"), DoSend),
-            }, Gap: 4f),
+            // Min-width row too. The input is pinned at 160 (typing never grows it); only the counter's digit count
+            // (0→140) moves its natural width, by a few units — far below the tab row's requirement, which wins.
+            }, Gap: 4f) { ConstrainsWindowMinWidth = true },
 
             // Quick-phrases popover: click a phrase to send it to the current target, then close.
             new ConditionalElement(() => _quickOpen, BuildQuickPopover()),
