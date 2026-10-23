@@ -21,6 +21,7 @@ public sealed partial class Plugin
     {
         NoteIncoming(msg);        // .Tabs.cs    — unread + log-dirty; must run regardless of auto-reply state
         LearnSelfFromEcho(msg);   // .Bubbles.cs — adopt our own identity when a sent message echoes back
+        NoteWhisper(msg);         // .Whisper.cs — per-person conversation list (name / preview / unread)
 
         if (!_autoReplyEnabled) return;
         if (msg.Channel != ChatChannel.Whisper) return;

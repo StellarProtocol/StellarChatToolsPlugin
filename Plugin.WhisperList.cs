@@ -1,0 +1,255 @@
+using System;
+using Stellar.Abstractions.Domain;
+using Stellar.Abstractions.Services;
+using UnityEngine;
+
+namespace Stellar.ChatTools;
+
+/// <summary>
+/// The WHISPER tab's layout: <c>[conversation list | selected conversation]</c> (data side: Plugin.Whisper.cs). Every
+/// other tab shows the plain log. The log area is ONE row — [Cond(whisper → list pane)] [Cell(Weight 1): Cond(whisper →
+/// header) over the log] — so the right pane IS the normal log (.Log.cs) with a per-peer filter: no second list
+/// implementation, and a hidden Cond contributes neither width nor a row gap (an inactive child is skipped by the layout).
+///
+/// Window minimum: the header row is <see cref="RowElement.ConstrainsWindowMinWidth"/> with a fixed-width
+/// <see cref="WhisperPaneMinWidth"/> cell, so while Whisper is open the window can't be narrower than list + gap + that
+/// pane (≈ 800, vs ≈ 621 for the tab row in English). The LOG row itself must NOT be marked: every bubble built under a
+/// marked row is NoCap (hugs its natural width, ignores MaxWidth — WindowBuilder-Patterns.md), which would stop long
+/// messages wrapping.
+///
+/// List rows: [unread dot slot] [avatar] [name (bold, online dot before it) / one-line preview]. The text column is a
+/// fixed-width cell placed LAST, so a long name or preview overflows only to the right, where the list viewport's own
+/// mask clips it (the VirtualList hard-clip pattern) — nothing is drawn over the dot or avatar. Right-click opens a small
+/// menu (close conversation / copy name) — the sticker-menu popup pattern (Borderless + DismissOnOutsideClick, rect
+/// re-asserted once the hidden window remounts).
+/// </summary>
+public sealed partial class Plugin
+{
+    private const float ConvListWidth       = 170f;
+    private const float WhisperPaneGap      = 6f;
+    private const float WhisperPaneMinWidth = 600f;   // right pane floor → window min ≈ 170 + 6 + 600 + window padding
+    private const float ConvRowHeight       = 50f;    // uniform VirtualList pitch (row content ≈ 47)
+    private const int   ConvPoolSize        = 24;     // ≈ 960 px max viewport ÷ 50 + buffer
+    private const int   ConvAvatarSize      = 32;
+    private const float ConvTextWidth       = 96f;    // 170 − 12 Selectable pad − 8 dot − 32 avatar − 2×6 gaps − 9 scrollbar lane
+    private const int   OnlineDotSize       = 7;
+    private const string OnlineDotResource  = "Stellar.ChatTools.Assets.online_dot.png";
+
+    private const string ConvMenuId = "chattools.convmenu";
+    private const float  ConvMenuW  = 200f;
+    private const float  ConvMenuH  = 76f;    // two items + panel padding (edge-flip estimate only)
+
+    private int _convWindowFirst;
+    private byte[]? _onlineDotPng;
+    private bool _onlineDotTried;
+
+    private IWindowControl _convMenuWindow = null!;
+    private long _convMenuPeer;
+    private bool _convMenuOpen, _convMenuPlaced;
+    private WindowRect _convMenuRect;
+
+    // Placeholder / header caches (polled every refresh → rebuilt only when the inputs change).
+    private long _hdrLevelPeer = -1; private int _hdrLevel; private string? _hdrLevelTpl; private string _hdrLevelText = "";
+
+    private bool WhisperActive() => _activeTab == ChatTab.Whisper;
+
+    private byte[]? OnlineDotPng()
+    {
+        if (_onlineDotTried) return _onlineDotPng;
+        _onlineDotTried = true;
+        _onlineDotPng = ReadResource(OnlineDotResource);   // .SendTarget.cs
+        return _onlineDotPng;
+    }
+
+    // The body's log area for every tab (.Window.cs BuildRoot).
+    private HudElement BuildLogArea() => new RowElement(new HudElement[]
+    {
+        new ConditionalElement(WhisperActive, new CellElement(BuildConversationPane(), Width: ConvListWidth)),
+        new CellElement(new ColumnElement(new HudElement[]
+        {
+            new ConditionalElement(WhisperActive, BuildWhisperHeader()),
+            BuildLogScroll(),   // .Log.cs — filtered to the selected peer while Whisper is open
+        }, Gap: 4f), Weight: 1f),
+    }, Gap: WhisperPaneGap);
+
+    // ── Header ──────────────────────────────────────────────────────────────────────────────────────────────────────
+    // [Name] [Lv.N] [● online] — or a muted "pick a conversation" prompt. Fixed-width cell inside a min-width row (see the
+    // class note); the row has no bubble, so the NoCap rule doesn't matter here.
+    private HudElement BuildWhisperHeader() => new RowElement(new HudElement[]
+    {
+        new CellElement(new RowElement(new HudElement[]
+        {
+            new TextElement(HeaderTitle, () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
+                Emphasis: true, NoWrap: true),
+            new TextElement(HeaderLevel, MutedCol, NoWrap: true),
+            new ConditionalElement(() => PeerOnline(_selectedPeer) == true, new RowElement(new HudElement[]
+            {
+                new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize),
+                new TextElement(() => _loc.T("chat.whisper.online"), MutedCol, NoWrap: true),
+            }, Gap: 4f)),
+        }, Gap: 8f), Width: WhisperPaneMinWidth),
+    }) { ConstrainsWindowMinWidth = true };
+
+    private string HeaderTitle() => _selectedPeer != 0 ? PeerName(_selectedPeer) : _loc.T("chat.whisper.pick");
+
+    private string HeaderLevel()
+    {
+        int lv = _selectedPeer != 0 ? PeerLevel(_selectedPeer) : 0;
+        if (lv <= 0) return "";
+        var tpl = _loc.T("chat.whisper.level");
+        if (lv != _hdrLevel || _hdrLevelPeer != _selectedPeer || !string.Equals(tpl, _hdrLevelTpl, StringComparison.Ordinal))
+        {
+            _hdrLevel = lv; _hdrLevelPeer = _selectedPeer; _hdrLevelTpl = tpl;
+            _hdrLevelText = SafeFormat(tpl, lv);
+        }
+        return _hdrLevelText;
+    }
+
+    // ── Conversation list ───────────────────────────────────────────────────────────────────────────────────────────
+    private HudElement BuildConversationPane()
+    {
+        var pool = new HudElement[ConvPoolSize];
+        for (int i = 0; i < ConvPoolSize; i++) { var k = i; pool[k] = BuildConversationRow(k); }
+        return new ColumnElement(new HudElement[]
+        {
+            // "+ New chat" in the whisper colours (same pill as the composer controls).
+            BuildPill(() => _loc.T("chat.whisper.newChat"), () => TabActiveText(ChatTab.Whisper),
+                () => TabPillFill(ChatTab.Whisper), OpenFriendPicker),   // .FriendPicker.cs
+            new ConditionalElement(() => ConvOrder().Count == 0,
+                new TextElement(() => _loc.T("chat.whisper.empty"), MutedCol)),
+            new VirtualListElement(
+                Count:     () => ConvOrder().Count,
+                RowHeight: ConvRowHeight,
+                Pool:      pool,
+                OnWindow:  first => _convWindowFirst = first,
+                Height:    200f),
+        }, Gap: 4f);
+    }
+
+    private Conversation? ConvAtSlot(int slot)
+    {
+        var list = ConvOrder();
+        int i = _convWindowFirst + slot;
+        return i >= 0 && i < list.Count ? list[i] : null;
+    }
+
+    private long ConvIdAt(int slot) => ConvAtSlot(slot)?.CharId ?? 0;
+
+    private HudElement BuildConversationRow(int k) => new SelectableElement(
+        new RowElement(new HudElement[]
+        {
+            // Unread dot slot — constant width whether shown or not (the tab-dot pattern, .Tabs.cs BuildTabLabel).
+            new CellElement(new ColumnElement(new HudElement[]
+            {
+                new ConditionalElement(() => ConvAtSlot(k) is { } c && HasUnread(c) && !IsViewingConversation(c.CharId),
+                    new RowElement(new HudElement[] { new ImageElement(UnreadDotPng, UnreadDotSize, UnreadDotSize) }),
+                    new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)),
+            }), Width: UnreadDotSize),
+            new GameTextureElement(() => AvatarTextureFor(ConvIdAt(k)), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 },
+            new CellElement(new ColumnElement(new HudElement[]
+            {
+                new RowElement(new HudElement[]
+                {
+                    new ConditionalElement(() => ConvAtSlot(k)?.Online == true,
+                        new RowElement(new HudElement[] { new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize) })),
+                    new TextElement(() => ConvAtSlot(k)?.Name is { Length: > 0 } n ? n : PeerName(ConvIdAt(k)), Emphasis: true, NoWrap: true),
+                }, Gap: 4f),
+                new TextElement(() => ConvPreview(k), MutedCol, NoWrap: true) { RichEmoji = true },
+            }, Gap: 1f), Width: ConvTextWidth),
+        }, Gap: 6f),
+        OnClick: () => SelectPeer(ConvIdAt(k)),
+        Selected: () => _selectedPeer != 0 && ConvIdAt(k) == _selectedPeer)
+    {
+        OnRightClick = () => OpenConvMenu(ConvIdAt(k)),
+    };
+
+    // One-line preview of the latest message: the text (inline <sprite=N> emoji draw as pictures — RichEmoji), or a
+    // localized [Sticker] / [Voice] / [Link] for the non-text kinds. Line breaks would add lines → flattened.
+    private string ConvPreview(int slot)
+    {
+        if (ConvAtSlot(slot) is not { } c) return "";
+        switch (c.LatestKind)
+        {
+            case 3: return _loc.T("chat.whisper.preview.sticker");
+            case 5: return _loc.T("chat.whisper.preview.voice");
+            case 6: return _loc.T("chat.whisper.preview.link");
+        }
+        var t = c.LatestText;
+        if (t.IndexOf('\n') >= 0) c.LatestText = t = t.Replace('\n', ' ');   // flatten once, in place
+        return t;
+    }
+
+    // ── Right-click menu ────────────────────────────────────────────────────────────────────────────────────────────
+    private IWindowControl RegisterConvMenuWindow()
+        => _services.Windows.Register(new WindowRegistration(
+            new WindowSpec(
+                Id:          ConvMenuId,
+                Title:       "",
+                DefaultRect: new WindowRect(100f, 100f, ConvMenuW, ConvMenuH),
+                Category:    WindowCategory.HUD,
+                Style:       WindowPanelStyle.Borderless)
+            { StartVisible = false, DismissOnOutsideClick = true,
+              ShouldRender = () => _services.ClientState.Phase == GamePhase.World
+                                && (_services.ClientState.UiState & GameUIState.Loading) == 0 },
+            new PanelElement(new ColumnElement(new HudElement[]
+            {
+                new SelectableElement(new TextElement(() => _loc.T("chat.whisper.menu.close")),
+                    () => { var p = _convMenuPeer; CloseConvMenu(); CloseConversation(p); }),
+                new SelectableElement(new TextElement(() => _loc.T("chat.whisper.menu.copyName")),
+                    () => { var p = _convMenuPeer; CloseConvMenu(); CopyToClipboard(PeerName(p)); }),
+            }, Gap: 2f), Padding: 8f),
+            OnClose: CloseConvMenu));   // framework invokes this on Escape / click-outside
+
+    private void OpenConvMenu(long peer)
+    {
+        if (peer == 0) { CloseConvMenu(); return; }
+        _convMenuPeer = peer;
+        _convMenuRect = CursorPopupRect(ConvMenuW, ConvMenuH);
+        _convMenuPlaced = false;
+        _convMenuOpen = true;
+        _convMenuWindow.SetRect(_convMenuRect);   // no-op while still unmounted; re-asserted in TickWhisperPopups
+        _convMenuWindow.SetVisible(true);         // opens from hidden → remounts on top; no BringToFront (Rule 5)
+    }
+
+    private void CloseConvMenu()
+    {
+        if (!_convMenuOpen) return;
+        _convMenuOpen = false;
+        _convMenuPlaced = false;
+        _convMenuWindow?.SetVisible(false);
+    }
+
+    // Plugins may reference UnityEngine; IL2CPP-safe clipboard (same as CombatMeter's upload-link copy).
+    private void CopyToClipboard(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try { GUIUtility.systemCopyBuffer = text; }
+        catch (Exception ex) { _services.Log.Warning($"[ChatTools] clipboard copy failed: {ex.Message}"); }
+    }
+
+    // A popup rect at the cursor, opening down-right and flipping at the canvas edges. Input.mousePosition is bottom-left
+    // SCREEN px; WindowRect is top-left CANVAS units → scale by CanvasWidth/ScreenWidth (k = 1 before the first measure).
+    private WindowRect CursorPopupRect(float w, float h)
+    {
+        var fw = _services.Framework;
+        float k = fw.ScreenWidth > 0 && fw.CanvasWidth > 0 ? (float)fw.CanvasWidth / fw.ScreenWidth : 1f;
+        float cw = fw.CanvasWidth > 0 ? fw.CanvasWidth : Screen.width;
+        float ch = fw.CanvasHeight > 0 ? fw.CanvasHeight : Screen.height;
+        var mp = Input.mousePosition;
+        float x = mp.x * k, y = (Screen.height - mp.y) * k;
+        if (x + w > cw) x = Mathf.Max(0f, x - w);
+        if (y + h > ch) y = Mathf.Max(0f, y - h);
+        return new WindowRect(x, y, w, h);
+    }
+
+    // Framework.Update (via TickWhisper): re-assert each popup's rect once its remount lands, and close them when the chat
+    // window goes away (they are separate windows and would otherwise stay up).
+    private void TickWhisperPopups()
+    {
+        if (!_convMenuOpen && !_friendPickerOpen) return;
+        if (!_window.IsShown) { CloseConvMenu(); CloseFriendPicker(); return; }
+        if (_convMenuOpen && !_convMenuPlaced && _convMenuWindow.IsShown) { _convMenuWindow.SetRect(_convMenuRect); _convMenuPlaced = true; }
+        if (_friendPickerOpen && !_friendPickerPlaced && _friendPickerWindow.IsShown)
+        { _friendPickerWindow.SetRect(_friendPickerRect); _friendPickerPlaced = true; }
+    }
+}

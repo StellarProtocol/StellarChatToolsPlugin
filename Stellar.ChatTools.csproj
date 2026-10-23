@@ -36,6 +36,8 @@
          "▾" glyph, whose fallback font made the chip taller than the other 28-tall composer pills (Plugin.SendTarget.cs). -->
     <EmbeddedResource Include="Assets/chevron_light.png" LogicalName="Stellar.ChatTools.Assets.chevron_light.png" />
     <EmbeddedResource Include="Assets/chevron_dark.png" LogicalName="Stellar.ChatTools.Assets.chevron_dark.png" />
+    <!-- Whisper online dot (32x32 green, shown at 7 px) for the conversation list + header (Plugin.WhisperList.cs). -->
+    <EmbeddedResource Include="Assets/online_dot.png" LogicalName="Stellar.ChatTools.Assets.online_dot.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
        reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
@@ -108,9 +109,14 @@ public sealed partial class Plugin
         //
         // Each bubble is a DIRECT child of the row (no CellElement/Weight wrapper — that would force a width and defeat
         // the hug). MaxWidth caps a long message so it wraps; FillColor stays null = themed accent tint.
+        // Name row = [whisper tag][name]. The tag is EMPTY (zero width) on every row but a whisper shown outside the Whisper
+        // tab, and the row's gap is ~0 (RowElement Gap 0 means "default 8", so a tiny value is the only true zero) — so an
+        // ordinary row is byte-for-byte the name alone. The tag is a constant element whose TEXT changes, never a
+        // ConditionalElement: a SetActive toggle inside the bubble's measured child makes it resize while scrolling
+        // (WindowBuilder-Patterns.md BubbleElement), while a text change is re-measured by the bubble's own forced rebuild.
         HudElement MakeBubble(HudElement body) => new BubbleElement(new ColumnElement(new HudElement[]
         {
-            new RowElement(new HudElement[] { BuildSenderName(i, self) }, Gap: 4f),
+            new RowElement(new HudElement[] { BuildWhisperTag(i, self), BuildSenderName(i, self) }, Gap: WhisperTagGap),
             body,
         }, Gap: 1f))
         { MaxWidth = BubbleMaxWidth };
@@ -142,14 +148,49 @@ public sealed partial class Plugin
     // colour, and non-whispers aren't repliable, so there's no reason to button them (and the colour is kept).
     private HudElement BuildSenderName(int i, bool self)
     {
-        HudElement plain = new TextElement(() => LogSenderName(i), () => LogSenderColor(i), Emphasis: true, NoWrap: true);
-        if (self) return plain;   // our own echoed whisper isn't a reply target
+        // Our own outgoing whisper outside the Whisper tab shows "Whisper · to Bob" in the tag INSTEAD of our name.
+        HudElement plain = new TextElement(() => self && WhisperTagShown(i) ? "" : LogSenderName(i), () => LogSenderColor(i),
+            Emphasis: true, NoWrap: true);
+        if (self) return plain;   // our own echoed whisper isn't a link to a conversation
         return new ConditionalElement(() => IsWhisperRow(i),
             new ButtonElement(() => LogSenderName(i), () => OnRowClick(i), Style: MenuButtonStyle.Glass),
             plain);
     }
 
     private bool IsWhisperRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper && m.SenderId != 0;
+
+    // ── Whisper tag (All / mixed tabs) ──────────────────────────────────────────────────────────────────────────────
+    // "Whisper · from" before an incoming whisperer's name, "Whisper · to Bob" in place of our own name on an outgoing
+    // one — small, bold, in the whisper colour. Hidden (empty) in the Whisper tab, where the whole pane is one person.
+    private const float WhisperTagGap      = 0.01f;   // ≈0: an empty tag must not shift the name (see MakeBubble)
+    private const int   WhisperTagFontSize = 12;      // TMP path honours FontSize (Bold makes it TMP, like Emphasis)
+
+    private HudElement BuildWhisperTag(int i, bool self)
+        => new TextElement(() => WhisperTag(i, self), () => ChannelColor(ChatChannel.Whisper), FontSize: WhisperTagFontSize, NoWrap: true)
+            { Bold = true };
+
+    private bool WhisperTagShown(int slot)
+        => _activeTab != ChatTab.Whisper && TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper;
+
+    // "to" tags are cached per peer, keyed on the name they were built with (+ language) — the Func is polled every refresh.
+    private readonly Dictionary<long, (string Name, string Text)> _whisperToTags = new();
+    private string? _whisperToTpl;
+
+    private string WhisperTag(int slot, bool self)
+    {
+        if (!WhisperTagShown(slot) || !TryMsg(slot, out var m)) return "";
+        // Incoming: the name after it is a padded button (BuildSenderName), which gives the tag its breathing room.
+        if (!self) return _loc.T("chat.whisper.tagFrom");
+        var tpl = _loc.T("chat.whisper.tagTo");
+        if (!string.Equals(tpl, _whisperToTpl, StringComparison.Ordinal)) { _whisperToTags.Clear(); _whisperToTpl = tpl; }
+        long peer = PeerOf(m);   // .Whisper.cs
+        var name = PeerName(peer);
+        if (_whisperToTags.TryGetValue(peer, out var e) && string.Equals(e.Name, name, StringComparison.Ordinal)) return e.Text;
+        var text = SafeFormat(tpl, name);
+        if (_whisperToTags.Count > 256) _whisperToTags.Clear();   // bounded
+        _whisperToTags[peer] = (name, text);
+        return text;
+    }
 
     // A whole-message picture-emoji/sticker row (StickerId != 0). Its body renders as an image, not the junk
     // "emojiPic=..." placeholder text the wire leaves in Text for these messages.

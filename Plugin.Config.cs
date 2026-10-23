@@ -29,7 +29,9 @@ public sealed partial class Plugin
         // run before _loc is assigned). Only fall back when nothing was persisted.
         if (string.IsNullOrEmpty(_autoReplyText)) _autoReplyText = _loc.T("chat.autoReply.default");
 
+        // 0..3 only: Whisper (4) needs a picked conversation, so it is never a startup default (older configs could hold it).
         _sendTargetIndex = Clamp(_cfg.Get(CfgSendTarget, 0), 0, 4);
+        if (_sendTargetIndex == 4) _sendTargetIndex = 0;
         LoadFavorites();   // .Favorites.cs — ordered favorite sticker ids ("stickerFavorites")
     }
 

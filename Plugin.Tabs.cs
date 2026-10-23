@@ -105,8 +105,11 @@ public sealed partial class Plugin
 
     private long SeenFor(ChatTab tab) => _lastSeen.TryGetValue(tab, out var v) ? v : 0L;
 
+    // Whisper is per PERSON (.Whisper.cs): its tab lights while any conversation is unread — server counts included —
+    // and clears per conversation as each is opened, not when the tab (or All) merely shows the message.
     private bool HasUnread(ChatTab tab)
-        => TabChannel(tab) is { } ch && NewestFor(ch) > SeenFor(tab);
+        => tab == ChatTab.Whisper ? AnyConversationUnread()
+         : TabChannel(tab) is { } ch && NewestFor(ch) > SeenFor(tab);
 
     private void SetActiveTab(ChatTab tab)
     {

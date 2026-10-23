@@ -87,7 +87,8 @@ public sealed partial class Plugin : IStellarPlugin
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Window.cs — settings ⚙ in the title bar, before the ✕
-                OnClose: () => { CloseTargetMenu(); _window!.SetVisible(false); }),   // .SendTarget.cs — don't strand the picker
+                // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs).
+                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseFriendPicker(); _window!.SetVisible(false); }),
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -111,6 +112,12 @@ public sealed partial class Plugin : IStellarPlugin
         _services.Framework.Update += TickTargetMenu;
         // Avatar decodes (.Avatars.cs) run here under a fixed per-tick budget — never inside the window apply.
         _services.Framework.Update += TickAvatarDecode;
+        // Per-person whispers (.Whisper.cs): conversation list from IFriends + live whispers; the conversation right-click
+        // menu (.WhisperList.cs) and the "+ New chat" friend picker (.FriendPicker.cs) are cursor popups like the above.
+        InitWhisper();
+        _convMenuWindow = RegisterConvMenuWindow();
+        _friendPickerWindow = RegisterFriendPickerWindow();
+        _services.Framework.Update += TickWhisper;
     }
 
     public void Dispose()
@@ -120,6 +127,8 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
+        DisposeWhisper();
         _sayColor.Dispose();
         _worldColor.Dispose();
         _partyColor.Dispose();
@@ -129,6 +138,8 @@ public sealed partial class Plugin : IStellarPlugin
         _window.Remove();
         _favMenuWindow?.Remove();
         _targetMenuWindow?.Remove();
+        _convMenuWindow?.Remove();
+        _friendPickerWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }

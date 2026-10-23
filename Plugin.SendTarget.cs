@@ -68,6 +68,7 @@ public sealed partial class Plugin
 
     private string ComposerPlaceholder()
     {
+        if (_sendTargetIndex == 4) return WhisperPlaceholder();
         int i = _sendTargetIndex >= 0 && _sendTargetIndex < TargetTabs.Length ? _sendTargetIndex : 0;
         var tpl = _loc.T("chat.composer.placeholder");
         var label = TargetLabel(i);
@@ -82,6 +83,21 @@ public sealed partial class Plugin
             _phText[i] = SafeFormat(tpl, label);
         }
         return _phText[i]!;
+    }
+
+    // "Whisper Alice…" for the open conversation, or the prompt to pick one (Send is disabled then — HasSendTarget).
+    private string WhisperPlaceholder()
+    {
+        if (_selectedPeer == 0) return _loc.T("chat.whisper.pickPlaceholder");
+        var tpl = _loc.T("chat.whisper.placeholder");
+        var name = PeerName(_selectedPeer);
+        if (_phPeer != _selectedPeer || !string.Equals(name, _phPeerName, StringComparison.Ordinal)
+            || !string.Equals(tpl, _phWhisperTpl, StringComparison.Ordinal))
+        {
+            _phPeer = _selectedPeer; _phPeerName = name; _phWhisperTpl = tpl;
+            _phWhisperText = SafeFormat(tpl, name);
+        }
+        return _phWhisperText;
     }
 
     // A malformed translated template must never throw out of a per-refresh Func; fall back to the bare template.
@@ -122,8 +138,28 @@ public sealed partial class Plugin
     private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick)
         => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize);
 
-    // [Guild ▾] in the target channel's tab colours (active-tab look). Click → the picker menu.
-    private string ChipLabel() => TargetLabel(_sendTargetIndex);
+    // [Guild ▾] in the target channel's tab colours (active-tab look); while whispering, the RECIPIENT chip [→ Name ▾] in
+    // the whisper colours (TargetTab() is Whisper then). Click → the picker menu (picking a channel leaves whisper —
+    // .Composer.cs OnPickTarget). With no conversation picked it falls back to the plain "Whisper" label.
+    private string ChipLabel()
+    {
+        if (_sendTargetIndex != 4 || _selectedPeer == 0) return TargetLabel(_sendTargetIndex);
+        var name = PeerName(_selectedPeer);   // .Whisper.cs
+        if (_chipPeer != _selectedPeer || !string.Equals(name, _chipName, StringComparison.Ordinal))
+        {
+            _chipPeer = _selectedPeer; _chipName = name;
+            _chipText = "→ " + name;
+        }
+        return _chipText;
+    }
+
+    private long _chipPeer;
+    private string? _chipName;
+    private string _chipText = "";
+    // Whisper placeholder cache ("Whisper Alice…"), same rebuild-on-change rule as _phText.
+    private long _phPeer;
+    private string? _phPeerName, _phWhisperTpl;
+    private string _phWhisperText = "";
 
     // The chip itself.
     private HudElement BuildTargetChip() => BuildPill(new HudElement[]

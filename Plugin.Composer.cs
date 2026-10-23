@@ -9,8 +9,9 @@ namespace Stellar.ChatTools;
 /// The send composer: ONE row of equal-height (28) controls — a channel-coloured target chip (.SendTarget.cs), ＋ (quick
 /// phrases), ☺ (stickers/emoji), the text field (placeholder follows the target), a counter shown only near the 140 cap,
 /// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings moved to the
-/// title-bar gear (.Window.cs). The target defaults to the active read-tab's channel but is overridable; whisper is
-/// reply-based. No local echo — sends round-trip via MessageReceived (and teach us our own identity, see Bubbles).
+/// title-bar gear (.Window.cs). The target defaults to the active read-tab's channel but is overridable. Whisper is per
+/// PERSON: target 4 whispers the conversation selected in the Whisper tab (.Whisper.cs) — the chip then reads "→ Name".
+/// No local echo — sends round-trip via MessageReceived (and teach us our own identity, see Bubbles).
 /// </summary>
 public sealed partial class Plugin
 {
@@ -18,9 +19,8 @@ public sealed partial class Plugin
     private const int MaxMessageLength = 140;   // mirrors the game's 0/140 counter; soft-capped on input
     private const int ComposerEmojiFontSize = 14;   // ☺ pill sprite: ≈14 wide, line box < the 20 pill strut
 
-    // 0=Say, 1=World, 2=Party, 3=Guild, 4=Whisper. Whisper is reply-based this phase (needs _replyTarget).
+    // 0=Say, 1=World, 2=Party, 3=Guild, 4=Whisper (to _selectedPeer, .Whisper.cs).
     private int _sendTargetIndex;
-    private ChatMessage? _replyTarget;   // the whisper being replied to (set by clicking a whisper row)
 
     private string _inputText = string.Empty;
     // Bumped per emoji-picker click; the composer InputElement.FocusRequest polls it and refocuses the field (caret at
@@ -49,15 +49,6 @@ public sealed partial class Plugin
     {
         return new ColumnElement(new HudElement[]
         {
-            // Whisper reply state: who we're replying to (+ cancel), or a hint to pick a whisper row.
-            new ConditionalElement(() => _sendTargetIndex == 4 && _replyTarget != null, new RowElement(new HudElement[]
-            {
-                new TextElement(() => _loc.TFormat("chat.reply.to", _replyTarget?.SenderName ?? ""), () => _services.Theme.Colors.MenuMuted),
-                new ButtonElement(() => _loc.T("chat.reply.cancel"), ClearReply),
-            }, Gap: 6f)),
-            new ConditionalElement(() => _sendTargetIndex == 4 && _replyTarget == null,
-                new TextElement(() => _loc.T("chat.reply.hint"), () => _services.Theme.Colors.MenuMuted)),
-
             // ONE composer row: [target chip ▾] [＋] [☺] [text field …] [n/140 near the cap] [Send]. Every control is
             // a 28-tall pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
             // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
@@ -102,9 +93,14 @@ public sealed partial class Plugin
     private ColorRgba? ToolPillFill(bool open) => open ? _services.Theme.Colors.MenuAccent with { A = TabPillAlpha } : TabTrackFill;
 
     // A pick from the target menu (.SendTarget.cs) — index-based like the old dropdown, and persisted as the default.
+    // Whisper needs a PERSON, so picking it opens the Whisper tab (pick or start a conversation there) and is never the
+    // persisted default. Picking a channel while the Whisper tab is open leaves it for that channel's tab — the composer
+    // and the log never disagree about where you are talking.
     private void OnPickTarget(int index)
     {
         if (index < 0 || index >= TargetTabs.Length) return;
+        if (index == 4) { SetActiveTab(ChatTab.Whisper); _sendTargetIndex = 4; return; }
+        if (_activeTab == ChatTab.Whisper) SetActiveTab(TargetTabs[index]);
         _sendTargetIndex = index;
         SaveSendTarget();
     }
@@ -142,20 +138,20 @@ public sealed partial class Plugin
 
     private string QuickPhrase(int i) => i >= 0 && i < _quickPhrases.Count ? _quickPhrases[i] : "";
 
-    // Resolve the current send target. Whisper requires a reply target (reply-based whisper this phase);
-    // null means "cannot send" (the hint is already shown), so the caller just no-ops.
+    // Resolve the current send target. Whisper goes to the selected conversation (.Whisper.cs); null means "cannot send"
+    // (no conversation picked — the placeholder already says so), so the caller just no-ops.
     private ChatTarget? ResolveTarget() => _sendTargetIndex switch
     {
         0 => ChatTarget.Say,
         1 => ChatTarget.World,
         2 => ChatTarget.Party,
         3 => ChatTarget.Guild,
-        4 => (_replyTarget is { } r && r.SenderId != 0) ? ChatTarget.Reply(r) : null,
+        4 => _selectedPeer != 0 ? ChatTarget.Whisper(_selectedPeer) : null,
         _ => null,
     };
 
     // Allocation-free "is there someone to send to" (polled every refresh by CanSendNow); mirrors ResolveTarget.
-    private bool HasSendTarget() => _sendTargetIndex != 4 || _replyTarget is { SenderId: not 0 };
+    private bool HasSendTarget() => _sendTargetIndex != 4 || _selectedPeer != 0;
 
     // Enter and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the draft: the field's
     // Enter strip already left the text in place, and _inputText is only cleared on a real send.
@@ -183,14 +179,6 @@ public sealed partial class Plugin
         JumpLogToBottom();   // .NewBelow.cs
         return true;
     }
-
-    private void SetReply(ChatMessage msg)
-    {
-        _replyTarget = msg;
-        _sendTargetIndex = 4;   // switch the composer to Whisper so the reply goes to this sender
-    }
-
-    private void ClearReply() => _replyTarget = null;
 
     private void AddQuickPhrase()
     {

@@ -20,6 +20,7 @@ public sealed partial class Plugin
     private readonly List<int> _filtered = new(MaxLogRows);
     private bool _logDirty = true;
     private ChatTab _lastFilterTab = (ChatTab)(-1);   // force first EnsureFiltered to build
+    private long _lastFilterPeer;                     // the Whisper tab's selected conversation the filter was built for
 
     // The virtual list OWNS windowing now: OnWindow pushes the first visible FILTERED row here each poll, and
     // LogMsgIndex maps pool slot k -> filtered row _windowFirst + k. (Was a newest-MaxLogRows display window.)
@@ -129,15 +130,19 @@ public sealed partial class Plugin
     // the slot accessors, so every accessor sees the same list within a frame.
     private void EnsureFiltered()
     {
-        if (!_logDirty && _activeTab == _lastFilterTab) return;
+        if (!_logDirty && _activeTab == _lastFilterTab && _selectedPeer == _lastFilterPeer) return;
         _filtered.Clear();
         var ch = TabChannel(_activeTab);   // null = All (no filter)
+        // The Whisper tab shows ONE conversation (.Whisper.cs): whispers whose other party is the selected peer — none
+        // until a conversation is picked.
+        long peer = _activeTab == ChatTab.Whisper ? _selectedPeer : -1;
         var m = _chat.RecentMessages;
         for (int i = 0; i < m.Count; i++)
         {
             var cm = m[i];
             if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)
-            if (ch == null || cm.Channel == ch.Value) _filtered.Add(i);
+            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer) _filtered.Add(i); }
+            else if (ch == null || cm.Channel == ch.Value) _filtered.Add(i);
         }
 
         // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER
@@ -154,6 +159,7 @@ public sealed partial class Plugin
         _filtered.AddRange(ordered);
 
         _lastFilterTab = _activeTab;
+        _lastFilterPeer = _selectedPeer;
         _logDirty = false;
     }
 
@@ -240,11 +246,11 @@ public sealed partial class Plugin
         _                   => (ColorRgba?)null,   // Unknown -> framework default text colour
     };
 
-    // Clicking a whisper row targets a reply to that sender (Phase 1 whisper = reply-based; no name->ID lookup
-    // for fresh whispers yet). Non-whisper rows are inert.
+    // Clicking a whisperer's name opens that conversation in the Whisper tab (.Whisper.cs) — from All / any tab, so a
+    // whisper seen in the mixed log jumps straight to its thread. Non-whisper rows are inert.
     private void OnRowClick(int slot)
     {
         if (!TryMsg(slot, out var m)) return;
-        if (m.Channel == ChatChannel.Whisper && m.SenderId != 0) SetReply(m);   // .Composer.cs
+        if (m.Channel == ChatChannel.Whisper) OpenConversation(PeerOf(m));
     }
 }

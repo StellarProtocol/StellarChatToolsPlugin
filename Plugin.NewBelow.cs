@@ -49,6 +49,7 @@ public sealed partial class Plugin
         if (_atBottom) return;
         if (msg.Channel == ChatChannel.System) return;   // notices ("Obtained …") are ambient: they never raise the bar
         if (TabChannel(_activeTab) is { } ch && ch != msg.Channel) return;
+        if (_activeTab == ChatTab.Whisper && PeerOf(msg) != _selectedPeer) return;   // only the open conversation is shown
         if (IsSelf(msg)) return;   // .Bubbles.cs — own sends jump to bottom (JumpLogToBottom), never count
         _newBelow++;
     }

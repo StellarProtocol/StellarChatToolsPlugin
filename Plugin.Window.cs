@@ -22,7 +22,8 @@ public sealed partial class Plugin
     private HudElement BuildRoot() => new ColumnElement(new HudElement[]
     {
         BuildTabBar(),       // .Tabs.cs
-        BuildLogScroll(),    // .Log.cs — the only flexible-height section; grows with the window
+        BuildLogArea(),      // .WhisperList.cs — the log (.Log.cs, the only flexible-height section; grows with the
+                             // window), with the conversation list + header beside/above it while Whisper is open
         BuildNewBelowBar(),  // .NewBelow.cs — "↓ N new messages" pill, shown only while scrolled up with unseen rows
         BuildComposer(),     // .Composer.cs
         BuildSettingsDrawer(),
