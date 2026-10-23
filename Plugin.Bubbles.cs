@@ -39,7 +39,7 @@ public sealed partial class Plugin
     // Hard width cap on a bubble (canvas px). Short messages hug; past the cap a long message wraps and the
     // bubble grows in height. Static like the game's chat (it does NOT track the window width — a Row offers
     // no "available width" to clamp to). Sized to fit the default 440px window; this is the single tuning knob
-    // for the wrap width. (Shrinking the window to its 560px minimum can clip a long bubble — tune here.)
+    // for the wrap width. (Shrinking the window to its 480px minimum can clip a long bubble — tune here.)
     private const float BubbleMaxWidth = 300f;
     // Vertical breathing room below each bubble row (canvas px), matching the game's spaced-out chat. The variable
     // VirtualListElement stacks rows at their MEASURED preferred heights and has no built-in row gap, so the gap is

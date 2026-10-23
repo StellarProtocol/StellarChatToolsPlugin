@@ -65,7 +65,7 @@ public sealed partial class Plugin : IStellarPlugin
                     Title:       _loc.T("chat.window.title"),
                     // Compact bubble layout: a narrower default than the game's chat (favouring density), but wide
                     // enough for the 7 read-tabs; grip-resizable (below) so users can grow it.
-                    DefaultRect: new WindowRect(21f, 586f, 560f, 430f),
+                    DefaultRect: new WindowRect(21f, 586f, 480f, 430f),
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
@@ -81,7 +81,7 @@ public sealed partial class Plugin : IStellarPlugin
                     // Resizable turns OFF vertical content auto-fit; the body's ScrollElement (flexibleHeight=1)
                     // absorbs the freed height so the log grows with the window (WindowBuilder BuildScroll).
                     Resizable = true,
-                    MinWidth = 560f, MinHeight = 260f,
+                    MinWidth = 480f, MinHeight = 260f,
                     MaxWidth = 1000f, MaxHeight = 1100f,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
