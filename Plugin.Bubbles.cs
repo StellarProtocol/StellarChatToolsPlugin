@@ -117,7 +117,11 @@ public sealed partial class Plugin
         // HLG where the single bubble used to — identical visuals, only the Cond's depth moved (out of the measured child).
         HudElement bubble = new ConditionalElement(() => IsStickerRow(i),
             MakeBubble(BuildStickerImage(i)),
-            MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i))));
+            // RichEmoji: LogText returns m.Text verbatim, keeping the inbound <sprite=N> tags the game leaves in the
+            // message; the framework hosts this body in TextMeshPro with the game's own chat sprite asset so those draw
+            // as real emoji images (literal tags until the asset resolves / off-game). Body only — the sender name
+            // carries no sprite tags, so it stays a plain Text.
+            MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i)) { RichEmoji = true }));
 
         var time   = new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true), Width: TimeColWidth);
         var gutter = new SpacerElement();   // flexible — soaks the row slack so the bubble hugs and the row packs
