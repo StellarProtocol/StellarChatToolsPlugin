@@ -36,7 +36,7 @@
   "chat.send": "Kirim",
   "chat.sendTo": "Kirim ke",
   "chat.settings.button": "Pengaturan",
-  "chat.settings.colors": "Warna kanal",
+  "chat.settings.colorsHint": "Warna kanal sama dengan tab di atas — ubah di pengaturan Tema.",
   "chat.settings.fontSize": "Ukuran font",
   "chat.settings.title": "Pengaturan",
   "chat.sticker.fav.add": "Tambahkan ke favorit",

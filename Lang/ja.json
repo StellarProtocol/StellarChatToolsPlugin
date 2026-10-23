@@ -36,7 +36,7 @@
   "chat.send": "送信",
   "chat.sendTo": "送信先",
   "chat.settings.button": "設定",
-  "chat.settings.colors": "チャンネル色",
+  "chat.settings.colorsHint": "チャンネルの色は上のタブと同じです。テーマ設定で変更できます。",
   "chat.settings.fontSize": "文字サイズ",
   "chat.settings.title": "設定",
   "chat.sticker.fav.add": "お気に入りに追加",

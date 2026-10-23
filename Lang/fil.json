@@ -36,7 +36,7 @@
   "chat.send": "Ipadala",
   "chat.sendTo": "Ipadala sa",
   "chat.settings.button": "Mga setting",
-  "chat.settings.colors": "Mga kulay ng channel",
+  "chat.settings.colorsHint": "Tugma ang mga kulay ng channel sa mga tab sa itaas — palitan ang mga ito sa mga setting ng Theme.",
   "chat.settings.fontSize": "Laki ng font",
   "chat.settings.title": "Mga setting",
   "chat.sticker.fav.add": "Idagdag sa mga paborito",

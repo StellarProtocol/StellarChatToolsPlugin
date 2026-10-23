@@ -39,7 +39,7 @@ public sealed partial class Plugin : IStellarPlugin
 
     // Per-channel sender-name colours. ChatTools-owned, user-editable slots: edited through the framework
     // Theme settings (the registry persists overrides) — IColorSlot is read-only to the plugin, so the
-    // settings drawer shows a live swatch legend rather than an in-window picker. Resolved live via .Value.
+    // channel tabs wear these colours as the legend; there is no in-window picker. Resolved live via .Value.
     private IColorSlot _sayColor = null!;      // Say == the game's "Current"/Scene channel
     private IColorSlot _worldColor = null!;
     private IColorSlot _partyColor = null!;

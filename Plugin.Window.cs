@@ -31,7 +31,7 @@ public sealed partial class Plugin
     private void ToggleSettings() => _settingsOpen = !_settingsOpen;
 
     // Settings drawer (gear-toggled). Migrates the auto-reply UI and adds a font-size control, the quick-phrase
-    // editor, and a channel-colour legend.
+    // editor, and a one-line pointer to where the channel colours are edited.
     private HudElement BuildSettingsDrawer() => new ConditionalElement(() => _settingsOpen, new ColumnElement(new HudElement[]
     {
         new SeparatorElement(),
@@ -68,10 +68,10 @@ public sealed partial class Plugin
 
         new SeparatorElement(),
 
-        // Channel colour legend — a live swatch + channel name per slot. The slots themselves are edited through
-        // the framework Theme settings (IColorSlot is read-only here), so this is a legend, not an in-window picker.
-        new TextElement(() => _loc.T("chat.settings.colors"), Emphasis: true),
-        BuildColorLegend(),
+        // Channel colours: the tab strip itself is now the legend (each tab wears its channel's colour), so a
+        // swatch list here would only repeat it. One hint pointing at where they are edited — the framework Theme
+        // settings (IColorSlot is read-only to the plugin).
+        new TextElement(() => _loc.T("chat.settings.colorsHint"), () => _services.Theme.Colors.MenuMuted),
     }, Gap: 4f));
 
     private HudElement BuildQuickEditor()
@@ -87,29 +87,5 @@ public sealed partial class Plugin
             }, Gap: 4f);
         }
         return new ListElement(() => _quickPhrases.Count, slots);
-    }
-
-    private HudElement BuildColorLegend()
-    {
-        (IColorSlot slot, string key)[] rows =
-        {
-            (_sayColor, "chat.color.say"),
-            (_worldColor, "chat.color.world"),
-            (_partyColor, "chat.color.party"),
-            (_guildColor, "chat.color.guild"),
-            (_whisperColor, "chat.color.whisper"),
-            (_systemColor, "chat.color.system"),
-        };
-        var children = new List<HudElement>(rows.Length);
-        foreach (var (slot, key) in rows)
-        {
-            var s = slot; var k = key;
-            children.Add(new RowElement(new HudElement[]
-            {
-                new SwatchElement(() => s.Value, 14f),
-                new TextElement(() => _loc.T(k), () => _services.Theme.Colors.MenuMuted),
-            }, Gap: 6f));
-        }
-        return new ColumnElement(children.ToArray(), Gap: 2f);
     }
 }
