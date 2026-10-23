@@ -8,7 +8,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// Sticker (picture-emoji) send picker — a popover beside the composer's ＋ quick-phrase button. Opens an all-icon
 /// grid (no localized category labels): representative-icon category tabs over a scrollable multi-column grid of the
-/// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker.
+/// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker. The FIRST tab is the
+/// inline-emoji tab (Plugin.Emoji.cs): its cells insert a <c>&lt;sprite=N&gt;</c> tag into the draft instead of sending.
 ///
 /// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0). Shows FREE + OWNED stickers:
 /// a row is kept when it is free (<see cref="StickerInfo.DefaultUnlocked"/>) OR the account owns the gated pack
@@ -43,7 +44,8 @@ public sealed partial class Plugin
 
     // Open state. Mutually exclusive with _quickOpen (see ToggleStickerPicker / ToggleQuickPhrases in Plugin.Composer.cs).
     private bool _stickerOpen;
-    private int  _stickerCat;   // index into StickerCategories() (NOT the raw GroupId)
+    private int  _stickerCat;   // TAB index: EmojiTab (0) = inline emoji (.Emoji.cs); k >= 1 = StickerCategories()[k - 1]
+                                // (NOT the raw GroupId). Defaults to 0 → the picker opens on the emoji tab.
 
     // Filtered catalog (free + gated, non-QuickMessage), cached once non-empty, plus the distinct GroupIds present (sorted).
     // The game's chat emoji panel tabs by GroupId (pack) — each tab = one GroupId — so we group by GroupId, NOT by the
@@ -100,11 +102,12 @@ public sealed partial class Plugin
     }
 
     // The stickers of the currently-selected category, cached by GroupId so the grid's per-frame Funcs don't allocate.
+    // The emoji tab (or an out-of-range tab) maps to group -1 = no stickers (no GroupId is negative).
     private List<StickerInfo> ActiveCategoryStickers()
     {
         var cats = StickerCategories();
-        int group = (_stickerCat >= 0 && _stickerCat < cats.Count) ? cats[_stickerCat]
-                  : (cats.Count > 0 ? cats[0] : 0);
+        int catIdx = _stickerCat - 1;   // tab 0 is the emoji tab; sticker groups start at tab 1
+        int group = (catIdx >= 0 && catIdx < cats.Count) ? cats[catIdx] : -1;
         if (group != _activeCatGroup)
         {
             _activeCatGroup = group;
@@ -170,7 +173,11 @@ public sealed partial class Plugin
         new SeparatorElement(),
         // FixedHeight: pin the grid at StickerGridHeight so it does NOT grow when the chat window is resized —
         // all slack height stays with the log's scroll instead (framework ScrollElement.FixedHeight).
-        new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true },
+        // The emoji tab swaps in its own RichEmoji grid (.Emoji.cs); every other tab shows the texture grid. Separate
+        // scrolls so each keeps its own scroll position.
+        new ConditionalElement(() => _stickerCat == EmojiTab,
+            new ScrollElement(BuildEmojiGrid(), Height: StickerGridHeight) { FixedHeight = true },
+            new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true }),
     }, Gap: 4f));
 
     // Representative-icon category tabs (one per GroupId/pack, icon-only — no localized labels). A tab shows its
@@ -178,24 +185,30 @@ public sealed partial class Plugin
     // SelectedBar adds a thin accent underline bar under the active tab (Option A "active tab" indicator). The icon
     // is wrapped in a centred RowElement so the Selectable/grid cell's width force-expand doesn't squish the square
     // thumbnail (WindowBuilder-Patterns.md). FillWidth lets the ~13-tab strip flow/wrap in a narrow window.
+    // Slot 0 is the inline-emoji tab (always present, even before the sticker table loads); slots 1.. are the
+    // GroupId tabs, slot k reading sticker category k - 1.
     private HudElement BuildCategoryTabs()
     {
-        var slots = new HudElement[MaxStickerCats];
-        for (int i = 0; i < MaxStickerCats; i++)
+        var slots = new HudElement[MaxStickerCats + 1];
+        slots[EmojiTab] = new SelectableElement(BuildEmojiTabIcon(),
+            OnClick: () => OnPickCategory(EmojiTab),
+            Selected: () => _stickerCat == EmojiTab) { SelectedBar = true };
+        for (int i = 1; i <= MaxStickerCats; i++)
         {
             var idx = i;
+            var cat = i - 1;
             slots[idx] = new SelectableElement(
                 new RowElement(new HudElement[]
                 {
                     new GameTextureElement(
-                        () => { var id = CategoryIconId(idx); return id == 0 ? null : _services.GameAssets.LoadStickerIcon(id, out _); },
+                        () => { var id = CategoryIconId(cat); return id == 0 ? null : _services.GameAssets.LoadStickerIcon(id, out _); },
                         (int)StickerTabSize, (int)StickerTabSize,
-                        () => { var id = CategoryIconId(idx); if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); }),
+                        () => { var id = CategoryIconId(cat); if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); }),
                 }, Justify: RowJustify.Center),
                 OnClick: () => OnPickCategory(idx),
                 Selected: () => _stickerCat == idx) { SelectedBar = true };
         }
-        return new ListElement(() => StickerCategories().Count, slots, Columns: MaxStickerCats,
+        return new ListElement(() => 1 + Math.Min(StickerCategories().Count, MaxStickerCats), slots, Columns: MaxStickerCats + 1,
             CellWidth: StickerTabCell, CellHeight: StickerTabCell) { FillWidth = true };
     }
 
