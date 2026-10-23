@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Stellar.Abstractions.Diagnostics;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
@@ -127,6 +128,7 @@ public sealed partial class Plugin
     private void EnsureFiltered()
     {
         if (!_logDirty && _activeTab == _lastFilterTab) return;
+        var hT = HitchProbe.Begin();   // diag: [Hitch] filter + timestamp sort rebuild (once per dirty batch)
         _filtered.Clear();
         var ch = TabChannel(_activeTab);   // null = All (no filter)
         var m = _chat.RecentMessages;
@@ -152,6 +154,7 @@ public sealed partial class Plugin
 
         _lastFilterTab = _activeTab;
         _logDirty = false;
+        HitchProbe.End("ct:filter", hT);
     }
 
     // Total logical rows the virtual list windows over = the active tab's filtered set (NO display cap — the Pool

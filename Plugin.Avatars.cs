@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Stellar.Abstractions.Diagnostics;
 using UnityEngine;
 
 namespace Stellar.ChatTools;
@@ -95,13 +96,16 @@ public sealed partial class Plugin
 
             // 4. Persistent store. Decode on THIS (main) thread; files are tiny so the sync read is cheap.
             var name = AvatarStoreName(charId);
+            var hT = HitchProbe.Begin();   // diag: [Hitch] sync store read + PNG decode + corner bake INSIDE the window apply
             var bytes = _services.Data.Read(name);
             if (bytes != null)
             {
                 var tex = DecodePng(bytes);
+                HitchProbe.End("ct:avatarDisk", hT);
                 if (tex != null) { LruInsert(charId, tex); return tex; }
                 _services.Data.Delete(name);   // corrupt in the store → drop so a fresh download can replace it, then re-resolve
             }
+            else HitchProbe.End("ct:avatarDiskMiss", hT);
 
             // 5. Miss → kick the async resolve, show the default meanwhile.
             BeginResolve(charId);
@@ -176,7 +180,9 @@ public sealed partial class Plugin
     {
         try
         {
+            var hT = HitchProbe.Begin();   // diag: [Hitch] posted decode of a fresh download (fw:internal, not the apply)
             var tex = DecodePng(bytes);
+            HitchProbe.End("ct:avatarDecodePost", hT);
             if (tex != null) LruInsert(charId, tex);
             else _negative.Add(charId);
         }
