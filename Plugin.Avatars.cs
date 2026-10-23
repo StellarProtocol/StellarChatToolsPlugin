@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Stellar.Abstractions.Diagnostics;
 using UnityEngine;
 
 namespace Stellar.ChatTools;
@@ -187,9 +186,7 @@ public sealed partial class Plugin
     {
         try
         {
-            var hT = HitchProbe.Begin();   // diag: [Hitch] budgeted PNG decode + corner bake (now OUTSIDE the window apply)
             var tex = DecodePng(bytes);
-            HitchProbe.End(fromDisk ? "ct:avatarDisk" : "ct:avatarDecodePost", hT);
             _inFlight.Remove(charId);
             if (tex != null) { LruInsert(charId, tex); return; }
             if (fromDisk) { _services.Data.Delete(AvatarStoreName(charId)); BeginResolve(charId); }

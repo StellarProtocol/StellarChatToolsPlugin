@@ -157,18 +157,9 @@ public sealed partial class Plugin
     // calling it again in the Uv func (to recover the sub-rect) is cheap and avoids shared-state ordering issues.
     private HudElement BuildStickerImage(int i) =>
         new GameTextureElement(
-            () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; return id == 0 ? null : StickerTexTimed(id); },
+            () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; return id == 0 ? null : _services.GameAssets.LoadStickerIcon(id, out _); },
             (int)StickerSize, (int)StickerSize,
             () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); });
-
-    // diag: [Hitch] the per-apply sticker texture lookup (cached after the first async request).
-    private object? StickerTexTimed(int id)
-    {
-        var hT = Stellar.Abstractions.Diagnostics.HitchProbe.Begin();
-        var tex = _services.GameAssets.LoadStickerIcon(id, out _);
-        Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:sticker", hT);
-        return tex;
-    }
 
     // The charId whose avatar photo this row shows (0 = unknown → the default face). For our own echoed rows the
     // SenderId can be 0, so prefer the learned _selfCharId when we have it. Fed to AvatarTextureFor (Plugin.Avatars.cs).
