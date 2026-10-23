@@ -16,13 +16,26 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    // Every composer control (chip, ＋, ☺, Send) is this tall, = the text field's 28-unit box. A pill is
-    // Selectable(4 + 4 v-padding) → Bubble(PaddingY 0) → content row whose height comes from two height-only struts
-    // (SpacerElement(Height) has no width), so the pill height doesn't depend on the font's line box: 4 + 20 + 4 = 28.
-    // The label is vertically centred by the row (MiddleLeft) as long as its line box is ≤ 20.
-    private const float PillStrutHeight = 20f;   // = ComposerControlHeight (28) − the Selectable's 4 + 4 padding
-    private const float PillPadX        = 8f;
+    // Every composer control (chip, ＋, ☺, Send) is exactly this tall, = the text field's 28-unit box; ＋ and ☺ are
+    // also this wide (square). A pill is Bubble(padding 0, the visible fill) → Selectable(4 + 4 v-padding, the click +
+    // hover wash) → content row whose height comes from two 20-tall struts, so the pill height doesn't depend on the
+    // font's line box: 4 + 20 + 4 = 28 — as long as every label's line box is ≤ 20. ⚠️ A PLAIN (non-Emphasis) Text
+    // holding a glyph the menu font lacks breaks that: the old "▾" fell back to a taller OS face and made the chip 31
+    // tall, so the chevron is now an image. The bubble sits OUTSIDE the Selectable (it used to be inside its padding),
+    // so the visible fill is the full 28-tall control instead of a 20-tall chip inset in an invisible 28 box.
+    private const float ComposerControlSize = 28f;
+    private const float PillStrutHeight = 20f;   // = ComposerControlSize − the Selectable's 4 + 4 padding
+    private const float PillPadX        = 6f;    // strut width; + the Selectable's own 6 = 12 each side of a label
     private const float PillRadius      = 8f;    // same rounding as the tab pills
+    private const float PillGap         = 2f;
+    // Icon pills (＋ / ☺) pack their glyph with no gap: 28 − 12 Selectable padding leaves 16 for the glyph itself.
+    // RowElement treats Gap 0 as "default gap" (8), so a near-zero value is the only way to ask for none.
+    private const float IconPillGap     = 0.01f;
+    private const int   ChevronW = 8, ChevronH = 5;
+    private const string ChevronLightResource = "Stellar.ChatTools.Assets.chevron_light.png";
+    private const string ChevronDarkResource  = "Stellar.ChatTools.Assets.chevron_dark.png";
+    private byte[]? _chevronLight, _chevronDark;
+    private bool _chevronTried;
 
     private const string TargetMenuId = "chattools.targetmenu";
     private const float  TargetMenuW  = 150f;    // canvas units
@@ -78,35 +91,81 @@ public sealed partial class Plugin
         catch (FormatException) { return tpl; }
     }
 
-    // The shared composer pill: CellElement (natural width — its LayoutElement's flexibleWidth 0 out-ranks the
-    // Selectable's flexibleWidth 1, so the pill hugs its label instead of soaking up the row's slack) → Selectable
-    // (click + hover wash) → ONE Bubble whose fill/text colours are Funcs (same single-structure rule as the tabs: state
-    // changes colours only, never the tree). Inside the min-width composer row the bubble hugs its natural width.
-    private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick)
+    // The shared composer pill: CellElement (natural width, or a fixed `width` for the square icon pills — its
+    // LayoutElement's flexibleWidth 0 out-ranks the children's flexibleWidth 1, so the pill hugs instead of soaking up
+    // the row's slack) → ONE Bubble (the visible fill; Funcs re-tint it, same single-structure rule as the tabs: state
+    // changes colours only, never the tree) → Selectable (click + hover wash, the full pill) → the content row. Inside
+    // the min-width composer row the bubble hugs its natural width; in a fixed-width cell it is stretched to the cell.
+    // Text pills get fixed-width struts (horizontal padding); icon pills get flexible ones (Width 0 = flexible), which
+    // centre the glyph in the fixed square.
+    private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick, float width = 0f)
     {
+        bool icon = width > 0f;
         var row = new HudElement[content.Length + 2];
-        row[0] = new SpacerElement(Height: PillStrutHeight);
+        row[0] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
         Array.Copy(content, 0, row, 1, content.Length);
-        row[row.Length - 1] = new SpacerElement(Height: PillStrutHeight);
-        return new CellElement(new SelectableElement(
-            new BubbleElement(new RowElement(row, Gap: 2f, Justify: RowJustify.Center))
+        row[row.Length - 1] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
+        return new CellElement(new BubbleElement(new SelectableElement(
+                new RowElement(row, Gap: icon ? IconPillGap : PillGap, Justify: RowJustify.Center),
+                OnClick: onClick))
             {
                 // Transparent static fill (NOT null — null = the themed accent default); FillColorFn re-tints live.
-                CornerRadius = PillRadius, PaddingX = PillPadX, PaddingY = 0f, FillColor = Transparent, FillColorFn = fill,
+                CornerRadius = PillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent, FillColorFn = fill,
             },
-            OnClick: onClick));
+            Width: width);
     }
 
     private HudElement BuildPill(Func<string> label, Func<ColorRgba?> text, Func<ColorRgba?> fill, Action onClick)
         => BuildPill(new HudElement[] { new TextElement(label, text, Emphasis: true, NoWrap: true) }, fill, onClick);
 
+    // A square ComposerControlSize icon pill (＋ / ☺) around one centred glyph element.
+    private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick)
+        => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize);
+
     // [Guild ▾] in the target channel's tab colours (active-tab look). Click → the picker menu.
+    private string ChipLabel() => TargetLabel(_sendTargetIndex);
+
+    // The chip itself.
     private HudElement BuildTargetChip() => BuildPill(new HudElement[]
         {
-            new TextElement(() => TargetLabel(_sendTargetIndex), () => TabActiveText(TargetTab()), Emphasis: true, NoWrap: true),
-            new TextElement(() => "▾", () => TabActiveText(TargetTab()), NoWrap: true),
+            new TextElement(ChipLabel, () => TabActiveText(TargetTab()), Emphasis: true, NoWrap: true),
+            BuildChevron(),
         },
         () => TabPillFill(TargetTab()), ToggleTargetMenu);
+
+    // The ▾ as an 8×5 image (see ComposerControlSize for why not a glyph). ImageElement can't be tinted, so a light and a
+    // dark copy are swapped by the label's own luminance (dark only on the Light preset, where labels are darkened). Both
+    // branches are the same size and the fixed-width cell pins the slot, so the swap never changes the chip's width — it
+    // sits inside the bubble's measured child (WindowBuilder-Patterns.md: keep variant content constant).
+    private HudElement BuildChevron() => new CellElement(new ConditionalElement(
+            () => Luminance(TabActiveText(TargetTab())) > 0.35f,
+            new RowElement(new HudElement[] { new ImageElement(() => ChevronPng(light: true), ChevronW, ChevronH) }),
+            new RowElement(new HudElement[] { new ImageElement(() => ChevronPng(light: false), ChevronW, ChevronH) })),
+        Width: ChevronW);
+
+    private byte[]? ChevronPng(bool light)
+    {
+        if (!_chevronTried)
+        {
+            _chevronTried = true;
+            _chevronLight = ReadResource(ChevronLightResource);
+            _chevronDark  = ReadResource(ChevronDarkResource);
+        }
+        return light ? _chevronLight : _chevronDark;
+    }
+
+    private byte[]? ReadResource(string name)
+    {
+        try
+        {
+            using var s = typeof(Plugin).Assembly.GetManifestResourceStream(name);
+            if (s == null) return null;
+            using var ms = new System.IO.MemoryStream();
+            s.CopyTo(ms);
+            return ms.ToArray();
+        }
+        catch (Exception ex) { _services.Log.Warning($"[ChatTools] resource {name} load failed: {ex.Message}"); return null; }
+    }
 
     // ── Picker menu ───────────────────────────────────────────────────────────────────────────────────────────────
 

@@ -32,6 +32,10 @@
     <!-- Title-bar settings gear (same icon CooldownBar/StatInspector ship; the ⚙ glyph has no in-game font coverage),
          read once via GetManifestResourceStream (Plugin.Window.cs). -->
     <EmbeddedResource Include="Assets/settings_gear.png" LogicalName="Stellar.ChatTools.Assets.settings_gear.png" />
+    <!-- Send-target chip chevron (32x20 drawn at 8x5; light + dark copy because an image can't be tinted). Replaces the
+         "▾" glyph, whose fallback font made the chip taller than the other 28-tall composer pills (Plugin.SendTarget.cs). -->
+    <EmbeddedResource Include="Assets/chevron_light.png" LogicalName="Stellar.ChatTools.Assets.chevron_light.png" />
+    <EmbeddedResource Include="Assets/chevron_dark.png" LogicalName="Stellar.ChatTools.Assets.chevron_dark.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
        reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences

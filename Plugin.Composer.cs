@@ -16,6 +16,7 @@ public sealed partial class Plugin
 {
     private const int MaxQuickPhrases = 12;
     private const int MaxMessageLength = 140;   // mirrors the game's 0/140 counter; soft-capped on input
+    private const int ComposerEmojiFontSize = 14;   // ☺ pill sprite: ≈14 wide, line box < the 20 pill strut
 
     // 0=Say, 1=World, 2=Party, 3=Guild, 4=Whisper. Whisper is reply-based this phase (needs _replyTarget).
     private int _sendTargetIndex;
@@ -58,14 +59,22 @@ public sealed partial class Plugin
                 new TextElement(() => _loc.T("chat.reply.hint"), () => _services.Theme.Colors.MenuMuted)),
 
             // ONE composer row: [target chip ▾] [＋] [☺] [text field …] [n/140 near the cap] [Send]. Every control is
-            // a 28-unit pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
+            // a 28-tall pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
             // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
             new RowElement(new HudElement[]
             {
                 BuildTargetChip(),   // .SendTarget.cs — channel-coloured chip, click = target picker menu
-                BuildPill(() => "＋", () => _services.Theme.Colors.MenuText, () => ToolPillFill(_quickOpen), ToggleQuickPhrases),
-                // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs).
-                BuildPill(() => "☺", () => _services.Theme.Colors.MenuText, () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
+                // ＋ / ☺ are 28×28 squares (.SendTarget.cs BuildIconPill). ASCII "+" (bold, centred) — the fullwidth "＋"
+                // was ~19 wide and made the pill 47; it can't fit the 16-unit glyph slot of a 28 square.
+                BuildIconPill(new TextElement(() => "+", () => _services.Theme.Colors.MenuText, Emphasis: true, Align: TextAlign.Center, NoWrap: true),
+                    () => ToolPillFill(_quickOpen), ToggleQuickPhrases),
+                // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs). The
+                // old "☺" glyph is missing from every in-game face (it drew an EMPTY pill), so the icon is the game's own
+                // chat emoji <sprite=1> through the RichEmoji TMP path — the same tag + path as the picker's emoji tab icon
+                // (.Emoji.cs), colour by nature, so it reads on the dark pill. FontSize sizes the sprite to the 16 slot and
+                // keeps its line box under the 20 strut (TMP honours FontSize on this surface, unlike plain Text).
+                BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true },
+                    () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
                     { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder }, Weight: 1f),
                 new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs

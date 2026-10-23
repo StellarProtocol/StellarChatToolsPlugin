@@ -9,9 +9,9 @@ namespace Stellar.ChatTools;
 /// <see cref="ConditionalElement"/> that picks a LEFT (others) or RIGHT (self) layout per message:
 /// a small rounded avatar chip, a content-hugging <see cref="BubbleElement"/> (the framework's rounded chat
 /// bubble — width hugs its child so a short message makes a narrow bubble and a long one wraps at the cap),
-/// and a muted timestamp on the opposite side. Self-detection is layered: the party roster's <c>IsSelf</c>
-/// member when available, and a send round-trip fallback that learns the local name/charId from our own
-/// echoed messages.
+/// and a muted timestamp on the opposite side. Self-detection is layered: the framework's character record
+/// (<c>IPlayerIdentity.CharId</c>/<c>Name</c>, known from login on), then the party roster's <c>IsSelf</c> member,
+/// then a send round-trip fallback that learns the local name/charId from our own echoed messages.
 ///
 /// Why a <see cref="BubbleElement"/> and not the old forced-<see cref="SelectableElement"/> chip: the chip
 /// force-expanded to the full row width (a baggy bubble far wider than its text). The bubble HUGS inside a
@@ -165,7 +165,7 @@ public sealed partial class Plugin
     // SenderId can be 0, so prefer the learned _selfCharId when we have it. Fed to AvatarTextureFor (Plugin.Avatars.cs).
     private long SenderCharId(int slot, bool self)
     {
-        if (self && _selfCharId != 0) return _selfCharId;
+        if (self && SelfCharId() is var me && me != 0) return me;
         return TryMsg(slot, out var m) ? m.SenderId : 0;
     }
 
@@ -175,12 +175,34 @@ public sealed partial class Plugin
 
     private bool IsSelfRow(int slot) => TryMsg(slot, out var m) && IsSelf(m);
 
+    // The local charId: the framework's character record (IPlayerIdentity.CharId) is authoritative and known from the
+    // character select on — so our own LOGIN-HISTORY rows sit on the right from the very first frame (they used to sit
+    // left until a send echo taught us who we are). Read live, never cached: it resets to 0 on logout and changes with
+    // the character. The learned roster/echo id is only the fallback while the record isn't readable.
+    private long SelfCharId()
+    {
+        long id = 0;
+        try { id = _services.PlayerState.CharId; } catch { /* identity not ready */ }
+        if (id != 0) return id;
+        LearnSelfFromRoster();
+        return _selfCharId;
+    }
+
     private bool IsSelf(ChatMessage m)
     {
-        LearnSelfFromRoster();
-        if (_selfCharId != 0 && m.SenderId == _selfCharId) return true;
-        if (!string.IsNullOrEmpty(_selfName) && string.Equals(m.SenderName, _selfName, StringComparison.Ordinal)) return true;
-        return false;
+        var me = SelfCharId();
+        // An authoritative id decides every row that carries a sender id; the (non-unique) name match is only for a row
+        // with no id (an echo can arrive with SenderId 0) or while no id is known at all.
+        if (me != 0 && m.SenderId != 0) return m.SenderId == me;
+        var name = SelfName();
+        return !string.IsNullOrEmpty(name) && string.Equals(m.SenderName, name, StringComparison.Ordinal);
+    }
+
+    private string? SelfName()
+    {
+        string? n = null;
+        try { n = _services.PlayerState.Name; } catch { /* identity not ready */ }
+        return !string.IsNullOrEmpty(n) ? n : _selfName;
     }
 
     // Cheapest, most reliable source: the party roster marks our own row. Populated once in a party; a no-op
