@@ -8,7 +8,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// Sticker (picture-emoji) send picker — a popover beside the composer's ＋ quick-phrase button. Opens an all-icon
 /// grid (no localized category labels): representative-icon category tabs over a scrollable multi-column grid of the
-/// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker. The FIRST tab is the
+/// active category's thumbnails; clicking a thumbnail sends that sticker and closes the picker. The FIRST tab is
+/// Favorites (Plugin.Favorites.cs: user-picked stickers, drag-reorderable, right-click to add/remove); the SECOND is the
 /// inline-emoji tab (Plugin.Emoji.cs): its cells insert a <c>&lt;sprite=N&gt;</c> tag into the draft instead of sending.
 ///
 /// Catalog source: <see cref="IGameAssets.GetSendableStickers"/> (framework 2.26.0). Shows FREE + OWNED stickers:
@@ -44,8 +45,11 @@ public sealed partial class Plugin
 
     // Open state. Mutually exclusive with _quickOpen (see ToggleStickerPicker / ToggleQuickPhrases in Plugin.Composer.cs).
     private bool _stickerOpen;
-    private int  _stickerCat;   // TAB index: EmojiTab (0) = inline emoji (.Emoji.cs); k >= 1 = StickerCategories()[k - 1]
-                                // (NOT the raw GroupId). Defaults to 0 → the picker opens on the emoji tab.
+    private int  _stickerCat = EmojiTab;   // TAB index: FavTab (0) = favorites (.Favorites.cs); EmojiTab (1) = inline
+                                           // emoji (.Emoji.cs); k >= FirstPackTab = StickerCategories()[k - FirstPackTab]
+                                           // (NOT the raw GroupId). The first open picks Favorites-or-Emoji (ToggleStickerPicker).
+    private bool _stickerTabChosen;        // the first-open default tab has been applied (later opens keep the last tab)
+    private const int FirstPackTab = 2;    // tab index of the first GroupId (pack) tab
 
     // Filtered catalog (free + gated, non-QuickMessage), cached once non-empty, plus the distinct GroupIds present (sorted).
     // The game's chat emoji panel tabs by GroupId (pack) — each tab = one GroupId — so we group by GroupId, NOT by the
@@ -61,6 +65,14 @@ public sealed partial class Plugin
     {
         _stickerOpen = !_stickerOpen;
         if (_stickerOpen) _quickOpen = false;   // mutually exclusive popovers
+        // Default tab, applied on the session's first open only: Favorites when it has anything to show, else Emoji.
+        // Later opens keep whatever tab the user left it on.
+        if (_stickerOpen && !_stickerTabChosen)
+        {
+            _stickerTabChosen = true;
+            _stickerCat = FavoriteStickers().Count > 0 ? FavTab : EmojiTab;
+        }
+        if (!_stickerOpen) CloseFavMenu();       // .Favorites.cs — the context menu never outlives the picker
     }
 
     // Populate _stickerCatalog + _stickerCats once the table has loaded. Returns false (no cache) while the catalog
@@ -102,11 +114,11 @@ public sealed partial class Plugin
     }
 
     // The stickers of the currently-selected category, cached by GroupId so the grid's per-frame Funcs don't allocate.
-    // The emoji tab (or an out-of-range tab) maps to group -1 = no stickers (no GroupId is negative).
+    // The favorites/emoji tabs (or an out-of-range tab) map to group -1 = no stickers (no GroupId is negative).
     private List<StickerInfo> ActiveCategoryStickers()
     {
         var cats = StickerCategories();
-        int catIdx = _stickerCat - 1;   // tab 0 is the emoji tab; sticker groups start at tab 1
+        int catIdx = _stickerCat - FirstPackTab;   // tabs 0/1 are favorites/emoji; sticker groups start at FirstPackTab
         int group = (catIdx >= 0 && catIdx < cats.Count) ? cats[catIdx] : -1;
         if (group != _activeCatGroup)
         {
@@ -141,8 +153,15 @@ public sealed partial class Plugin
     {
         int id = StickerIdAt(idx);
         if (id == 0) return;
+        SendStickerAndClose(id);
+    }
+
+    // Shared by the pack grid and the Favorites grid, so a favorite sends exactly like a click in its own pack tab.
+    private void SendStickerAndClose(int id)
+    {
         SendSticker(id);
         _stickerOpen = false;   // close on pick, like the quick-phrase popover
+        CloseFavMenu();
     }
 
     // Resolve the current composer target and send the sticker. Null target (e.g. Whisper with no reply picked) is a
@@ -174,11 +193,13 @@ public sealed partial class Plugin
         new SeparatorElement(),
         // FixedHeight: pin the grid at StickerGridHeight so it does NOT grow when the chat window is resized —
         // all slack height stays with the log's scroll instead (framework ScrollElement.FixedHeight).
-        // The emoji tab swaps in its own RichEmoji grid (.Emoji.cs); every other tab shows the texture grid. Separate
-        // scrolls so each keeps its own scroll position.
-        new ConditionalElement(() => _stickerCat == EmojiTab,
-            new ScrollElement(BuildEmojiGrid(), Height: StickerGridHeight) { FixedHeight = true },
-            new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true }),
+        // Favorites (.Favorites.cs) and the emoji tab (.Emoji.cs) each swap in their own grid; every pack tab shows the
+        // texture grid. Separate scrolls so each keeps its own scroll position.
+        new ConditionalElement(() => _stickerCat == FavTab,
+            new ScrollElement(BuildFavoritesBody(), Height: StickerGridHeight) { FixedHeight = true },
+            new ConditionalElement(() => _stickerCat == EmojiTab,
+                new ScrollElement(BuildEmojiGrid(), Height: StickerGridHeight) { FixedHeight = true },
+                new ScrollElement(BuildStickerGrid(), Height: StickerGridHeight) { FixedHeight = true })),
     }, Gap: 4f));
 
     // Representative-icon category tabs (one per GroupId/pack, icon-only — no localized labels). A tab shows its
@@ -186,18 +207,21 @@ public sealed partial class Plugin
     // SelectedBar adds a thin accent underline bar under the active tab (Option A "active tab" indicator). The icon
     // is wrapped in a centred RowElement so the Selectable/grid cell's width force-expand doesn't squish the square
     // thumbnail (WindowBuilder-Patterns.md). FillWidth lets the ~13-tab strip flow/wrap in a narrow window.
-    // Slot 0 is the inline-emoji tab (always present, even before the sticker table loads); slots 1.. are the
-    // GroupId tabs, slot k reading sticker category k - 1.
+    // Slot 0 is Favorites and slot 1 the inline-emoji tab (both always present, even before the sticker table loads);
+    // slots FirstPackTab.. are the GroupId tabs, slot k reading sticker category k - FirstPackTab.
     private HudElement BuildCategoryTabs()
     {
-        var slots = new HudElement[MaxStickerCats + 1];
+        var slots = new HudElement[MaxStickerCats + FirstPackTab];
+        slots[FavTab] = new SelectableElement(BuildFavTabIcon(),
+            OnClick: () => OnPickCategory(FavTab),
+            Selected: () => _stickerCat == FavTab) { SelectedBar = true };
         slots[EmojiTab] = new SelectableElement(BuildEmojiTabIcon(),
             OnClick: () => OnPickCategory(EmojiTab),
             Selected: () => _stickerCat == EmojiTab) { SelectedBar = true };
-        for (int i = 1; i <= MaxStickerCats; i++)
+        for (int i = FirstPackTab; i < MaxStickerCats + FirstPackTab; i++)
         {
             var idx = i;
-            var cat = i - 1;
+            var cat = i - FirstPackTab;
             slots[idx] = new SelectableElement(
                 new RowElement(new HudElement[]
                 {
@@ -209,7 +233,8 @@ public sealed partial class Plugin
                 OnClick: () => OnPickCategory(idx),
                 Selected: () => _stickerCat == idx) { SelectedBar = true };
         }
-        return new ListElement(() => 1 + Math.Min(StickerCategories().Count, MaxStickerCats), slots, Columns: MaxStickerCats + 1,
+        return new ListElement(() => FirstPackTab + Math.Min(StickerCategories().Count, MaxStickerCats), slots,
+            Columns: MaxStickerCats + FirstPackTab,
             CellWidth: StickerTabCell, CellHeight: StickerTabCell) { FillWidth = true };
     }
 
@@ -230,7 +255,11 @@ public sealed partial class Plugin
                         (int)StickerThumbSize, (int)StickerThumbSize,
                         () => { var id = StickerIdAt(idx); if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); }),
                 }, Justify: RowJustify.Center),
-                OnClick: () => OnPickSticker(idx));
+                OnClick: () => OnPickSticker(idx))
+            {
+                // Context menu: "Add to favorites" (or "Remove from favorites" if it already is one) — .Favorites.cs.
+                OnRightClick = () => OpenFavMenu(StickerIdAt(idx)),
+            };
         }
         // FillWidth flows the grid to fill the popover width (as many StickerCellSize cells per row as fit) and
         // re-wraps on window resize — a fixed column count left dead space on the right of a wide/resized window.

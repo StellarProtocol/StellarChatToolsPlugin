@@ -25,6 +25,8 @@
     <EmbeddedResource Include="Lang/id.json" LogicalName="Stellar.ChatTools.Lang.id.json" />
     <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.ChatTools.Lang.fil.json" />
     <EmbeddedResource Include="Lang/ko.json" LogicalName="Stellar.ChatTools.Lang.ko.json" />
+    <!-- Favorites tab icon (sticker picker), read once via GetManifestResourceStream (Plugin.Favorites.cs). -->
+    <EmbeddedResource Include="Assets/favorite_star.png" LogicalName="Stellar.ChatTools.Assets.favorite_star.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
        reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences

@@ -3,7 +3,7 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// Inline-emoji tab of the sticker picker (always the FIRST tab, <see cref="EmojiTab"/>). Mirrors the game's own chat
+/// Inline-emoji tab of the sticker picker (always the SECOND tab, after Favorites — <see cref="EmojiTab"/>). Mirrors the game's own chat
 /// emoji panel: it hardcodes 63 inline emoji and writes <c>&lt;sprite=N&gt;</c> (N = 1..63, 1-based, sent verbatim) into
 /// the draft — it does NOT send (<c>chat_emoji_container_popup_view.lua:31,588-596</c>). Those are the sticker table's
 /// GroupId 1 rows, which the texture grid (.Stickers.cs) deliberately drops because they have no standalone texture;
@@ -19,7 +19,7 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    private const int   EmojiTab        = 0;     // tab index of the emoji tab; sticker GroupId tabs follow at 1..
+    private const int   EmojiTab        = 1;     // tab index of the emoji tab (after Favorites = 0); GroupId tabs follow
     private const int   EmojiCount      = 63;    // the game's hardcoded emojiCount_ (sprite 64 exists but is unreachable)
     private const float EmojiCellSize   = 44f;   // grid cell px — smaller than a sticker cell, like the game's panel
     private const int   EmojiFontSize   = 30;    // TMP sprites scale with font size → this sets the emoji's drawn size

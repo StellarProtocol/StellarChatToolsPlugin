@@ -96,11 +96,17 @@ public sealed partial class Plugin : IStellarPlugin
         // whisper auto-reply. The handler early-outs when auto-reply is off, so the only cost of being
         // always-subscribed is the unread bookkeeping we need regardless of the window being open.
         _chat.MessageReceived += OnChatMessage;   // fires on the Unity main thread
+
+        // Sticker right-click menu (.Favorites.cs): a cursor-positioned click-away popup; the Update hook only
+        // re-asserts its rect once the window has remounted after SetVisible(true).
+        _favMenuWindow = RegisterFavMenuWindow();
+        _services.Framework.Update += TickFavMenuPlace;
     }
 
     public void Dispose()
     {
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
         _sayColor.Dispose();
         _worldColor.Dispose();
         _partyColor.Dispose();
@@ -108,6 +114,7 @@ public sealed partial class Plugin : IStellarPlugin
         _whisperColor.Dispose();
         _systemColor.Dispose();
         _window.Remove();
+        _favMenuWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }

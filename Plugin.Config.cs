@@ -30,6 +30,7 @@ public sealed partial class Plugin
         if (string.IsNullOrEmpty(_autoReplyText)) _autoReplyText = _loc.T("chat.autoReply.default");
 
         _sendTargetIndex = Clamp(_cfg.Get(CfgSendTarget, 0), 0, 4);
+        LoadFavorites();   // .Favorites.cs — ordered favorite sticker ids ("stickerFavorites")
     }
 
     private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
