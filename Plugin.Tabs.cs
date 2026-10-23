@@ -56,7 +56,7 @@ public sealed partial class Plugin
         for (int i = 0; i < m.Count; i++)
         {
             var msg = m[i];
-            if (msg.IsHistory) continue;
+            if (msg.IsHistory || IsUnrenderable(msg)) continue;   // hidden rows (.Log.cs) never seed unread — they're never shown
             if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
         }
         foreach (var tab in Tabs)
@@ -68,8 +68,10 @@ public sealed partial class Plugin
     // Called from the inbound handler for every received message (unread + log-dirty signal).
     private void NoteIncoming(ChatMessage msg)
     {
-        _logDirty = true;   // .Log.cs — force the filtered view to rebuild even if the ring count is stable
-        if (msg.IsHistory) return;
+        _logDirty = true;   // .Log.cs — force the filtered view to rebuild (even a hidden msg can front-drop the 500-ring + shift indices)
+        // Hidden rows (.Log.cs IsUnrenderable) and history never contribute to unread — they never occupy a log row.
+        // Mirror the IsHistory early-return: bail BEFORE touching _newest/_lastSeen, leaving _logDirty set as above.
+        if (IsUnrenderable(msg) || msg.IsHistory) return;
         if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
         // The active tab is "being viewed", so a message for it is seen immediately (never shows unread).
         if (TabChannel(_activeTab) is { } active && active == msg.Channel && msg.MsgId > SeenFor(_activeTab))

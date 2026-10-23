@@ -95,6 +95,27 @@ public sealed partial class Plugin
 
     private ColorRgba? MutedCol() => _services.Theme.Colors.MenuMuted;
 
+    // A message we cannot render: a non-text payload type (hyperlink/notice/voice/picture) that carries no
+    // readable text and no sticker. The framework probe discards chat_hypertext/multi_lang_notice/voice, so these
+    // leak an empty or punctuation-only msg_text fragment (e.g. a lone "(") with a blank sender + id 0. Hide them.
+    // See Chat-System-Architecture.md §3-4 (known, pre-existing framework decode limitation — we only hide here).
+    private static bool IsUnrenderable(in ChatMessage m)
+    {
+        if (m.StickerId != 0) return false;                  // whole-message sticker = renderable (StickerId surfaced)
+        if (m.Type == ChatMessageType.Regular) return false; // real player text: never hide (even one char / punctuation)
+        // Non-Regular types (System / ItemLink / Emote / Unknown): hide only when there is no readable glyph left.
+        return !HasReadableText(m.Text);
+    }
+
+    // true if the string contains at least one letter or digit (CJK counts as a letter -> kept). Pure whitespace or
+    // punctuation-only fragments (the "(" junk) return false.
+    private static bool HasReadableText(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        for (int i = 0; i < s.Length; i++) if (char.IsLetterOrDigit(s[i])) return true;
+        return false;
+    }
+
     // Rebuild the filtered index list when a message arrived (_logDirty) or the tab changed. Cheap no-op when
     // clean. Called from VisibleLogCount (which the list binding reads first each frame) and defensively from
     // the slot accessors, so every accessor sees the same list within a frame.
@@ -105,7 +126,11 @@ public sealed partial class Plugin
         var ch = TabChannel(_activeTab);   // null = All (no filter)
         var m = _chat.RecentMessages;
         for (int i = 0; i < m.Count; i++)
-            if (ch == null || m[i].Channel == ch.Value) _filtered.Add(i);
+        {
+            var cm = m[i];
+            if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)
+            if (ch == null || cm.Channel == ch.Value) _filtered.Add(i);
+        }
 
         // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER
         // CHANNEL — each channel's whole time-span concatenated after the last → the ring is globally out of time
