@@ -71,7 +71,12 @@ public sealed partial class Plugin
         _logDirty = true;   // .Log.cs — force the filtered view to rebuild (even a hidden msg can front-drop the 500-ring + shift indices)
         // Hidden rows (.Log.cs IsUnrenderable) and history never contribute to unread — they never occupy a log row.
         // Mirror the IsHistory early-return: bail BEFORE touching _newest/_lastSeen, leaving _logDirty set as above.
-        if (IsUnrenderable(msg) || msg.IsHistory) return;
+        if (IsUnrenderable(msg)) return;
+        // Every SHOWN text body — login history included (the history batches are the login freeze) — is handed to the
+        // framework's TMP glyph prewarm NOW, so its missing glyphs rasterize a few per frame before the row is first
+        // laid out, instead of all inside one window apply. Sticker rows draw no text body. Best-effort hint only.
+        if (msg.StickerId == 0 && !string.IsNullOrEmpty(msg.Text)) _services.Windows.PrewarmText(msg.Text);
+        if (msg.IsHistory) return;
         NoteNewBelow(msg);   // .NewBelow.cs — counts it for the "↓ N new messages" bar if scrolled up + in the active tab
         if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
         // The active tab is "being viewed", so a message for it is seen immediately (never shows unread).
