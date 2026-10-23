@@ -25,10 +25,7 @@ public sealed partial class Plugin
 
     private const string UnreadDotResource = "Stellar.ChatTools.Assets.unread_dot.png";
     private const int    UnreadDotSize     = 8;      // display px of the 32x32 dot PNG
-    private const float  UnreadDotGap      = 2f;     // label → dot-slot gap
-    // Total width reserved after the label (gap + dot slot), in every state. The SAME width is reserved before the
-    // label too, so the label stays centred and a tab is the same width active or inactive, dot or no dot.
-    private const float  TabDotSlotWidth   = UnreadDotGap + UnreadDotSize;
+    private const float  UnreadDotGap      = 2f;     // label → dot-slot gap = the tab row's own Gap (BuildTabLabel)
     private const float  TabPillAlpha      = 0.25f;  // active pill = channel colour at this alpha
     private const float  TabMutedMix       = 0.55f;  // inactive text = 55% channel colour, 45% window background
     private const float  TabActiveMinContrast = 4.5f;  // WCAG AA body text — active label vs its pill
@@ -248,34 +245,46 @@ public sealed partial class Plugin
             { FillColor = TabTrackFill, CornerRadius = 10f, PaddingX = 4f, PaddingY = 4f };
     }
 
-    // The tab's content row, the SAME in every state: [left spacer = slot width] [bold label] [gap] [dot slot]. The
-    // left spacer mirrors the right gap + dot slot, so the label stays centred on its pill. The toolkit has no
-    // overlay/absolute-position element, so the dot sits inline just AFTER the label, raised toward the cap line.
+    // The tab's content row, the SAME in every state: [left spacer = dot width] gap [bold label] gap [dot slot]. The
+    // left side (spacer + gap) mirrors the right (gap + dot slot), so the label stays centred on its pill. The toolkit
+    // has no overlay/absolute-position element, so the dot sits inline just AFTER the label, raised toward the cap line.
     //
-    // Every width in this row comes from a SpacerElement with Width set (pins min AND preferred, flexible 0) or the
-    // label — never from the unread-dot ConditionalElement. The dot column is [Cond(dot) ; Spacer(UnreadDotSize x 5)]:
-    // a Column's preferred/min width is the MAX of its children, the spacer always reports UnreadDotSize, and both Cond
-    // branches (8 px image / 8 px spacer) are ≤ that — so the column is exactly UnreadDotSize wide whether the dot is
-    // shown, hidden, or its branch not yet lazily built. That matters because the Cond IS inside the bubble's measured
-    // child (WindowBuilder-Patterns.md warns a SetActive toggle there can be read on stale layout): with its width
-    // dominated by an always-present spacer, a stale read can't change the measured width. The spacer below the dot also
-    // lifts it above the label's centre line, and its Width keeps the slot from being squeezed (an ImageElement only
-    // sets a preferred size). The active tab never shows the dot (its channel is the one being viewed, so HasUnread is
-    // always false for it — SetActiveTab / NoteIncoming keep its last-seen current); the !active guard just makes it so.
+    // ⚠️ The row's Gap IS the label→dot gap, and it must be non-zero: the framework treats RowElement Gap == 0 as "use
+    // the default RowGap" (8), NOT as zero spacing. The old row passed Gap: 0f plus explicit gap spacers, so it really
+    // had 8 between EVERY child — left inset 10+8 vs right 8+2+8+8 → the label sat exactly 4 left of centre on every
+    // tab (measured in-game: 26 vs 34 insets incl. the Selectable/bubble padding). Spacing via Gap puts exactly one gap
+    // on each side of the label, so there are no gap spacers.
+    //
+    // Every width in this row comes from a SpacerElement with Width set (pins min AND preferred, flexible 0), the label,
+    // or the fixed-width dot cell — never from the unread-dot ConditionalElement. The dot column is
+    // [Cond(dot) ; Spacer(UnreadDotSize x 5)]: a Column's preferred/min width is the MAX of its children, the spacer
+    // always reports UnreadDotSize, and both Cond branches (8 px image / 8 px spacer) are ≤ that — so the column is
+    // exactly UnreadDotSize wide whether the dot is shown, hidden, or its branch not yet lazily built. That matters
+    // because the Cond IS inside the bubble's measured child (WindowBuilder-Patterns.md warns a SetActive toggle there
+    // can be read on stale layout): with its width dominated by an always-present spacer, a stale read can't change the
+    // measured width. The spacer below the dot also lifts it above the label's centre line, and its Width keeps the
+    // slot from being squeezed (an ImageElement only sets a preferred size).
+    //
+    // The column sits in a CellElement(Width) because a ColumnElement's force-expand VLG reports flexibleWidth = 1 up
+    // to its parent: bare in this row it would soak up ALL the leftover whenever the weighted tab cell is wider than its
+    // content, pushing the label left by half that slack. The fixed-width cell's LayoutElement (flexible 0) outranks the
+    // VLG's report, so the row has no flexible child and Justify.Center centres the whole content in the pill.
+    //
+    // The active tab never shows the dot (its channel is the one being viewed, so HasUnread is always false for it —
+    // SetActiveTab / NoteIncoming keep its last-seen current); the !active guard just makes it so.
     private HudElement BuildTabLabel(ChatTab tab) => new RowElement(new HudElement[]
     {
-        new SpacerElement(Width: TabDotSlotWidth),
+        new SpacerElement(Width: UnreadDotSize),
         new TextElement(() => _loc.T(TabLabelKey(tab)),
             () => _activeTab == tab ? TabActiveText(tab) : TabMutedText(tab),
             Emphasis: true, Align: TextAlign.Center),   // every tab is bold — state reads from colour + the pill
-        new SpacerElement(Width: UnreadDotGap),
-        new ColumnElement(new HudElement[]
+        new CellElement(new ColumnElement(new HudElement[]
         {
             new ConditionalElement(() => _activeTab != tab && HasUnread(tab),
                 // Row wrapper so the fixed-size image isn't width-stretched (WindowBuilder-Patterns.md force-expand).
                 new RowElement(new HudElement[] { new ImageElement(UnreadDotPng, UnreadDotSize, UnreadDotSize) }),
                 new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)),
             new SpacerElement(Width: UnreadDotSize, Height: 5f),
-        }),
-    }, Gap: 0f, Justify: RowJustify.Center);
+        }), Width: UnreadDotSize),
+    }, Gap: UnreadDotGap, Justify: RowJustify.Center);
 }
