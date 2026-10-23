@@ -86,6 +86,10 @@ public sealed partial class Plugin
             VariableHeight = true,
             StickToBottom  = true,
             ResetScroll    = TakeTabResetPending,
+            // Per-row identity so the variable list can tell when the 500-entry RecentMessages ring front-drops and
+            // re-maps a filtered index to a DIFFERENT message at constant Count (which otherwise leaves a tall sticker
+            // row sized by a short text row's stale cached height → permanent overlap). See StableRowId.
+            RowId          = StableRowId,
         };
     }
 
@@ -144,6 +148,32 @@ public sealed partial class Plugin
         if (i >= 0 && i < m.Count) { msg = m[i]; return true; }
         msg = default!;
         return false;
+    }
+
+    // Stable per-message identity for the variable list's height-cache verification (VirtualListElement.RowId).
+    // ⚠️ The framework feeds the DATA index (= filtered-row index, _windowFirst-INDEPENDENT), NOT a pool slot — so
+    // resolve it straight through _filtered here, never via TryMsg/LogMsgIndex (those add _windowFirst and would
+    // read the wrong row). Every ChatMessage field is immutable, so this id is CONSTANT for a given message no
+    // matter which ring index it drifts to as the 500-entry RecentMessages ring front-drops — which is exactly what
+    // lets the list notice a data index now points at a different message and re-verify that row's cached height.
+    // MsgId is server-unique globally EXCEPT whispers (per-peer, see EnsureFiltered's sort note), so fold in SenderId
+    // (distinct per peer) plus Timestamp/StickerId/Text so a per-peer whisper #5 and another peer's #5 don't collide.
+    // A rare collision only costs a missed verify (one stale latch survives a shift longer), never wrong behaviour.
+    private long StableRowId(int dataIndex)
+    {
+        EnsureFiltered();
+        if (dataIndex < 0 || dataIndex >= _filtered.Count) return 0L;
+        var m = _chat.RecentMessages;
+        int ri = _filtered[dataIndex];
+        if (ri < 0 || ri >= m.Count) return 0L;
+        var msg = m[ri];
+        long id = 17L;
+        id = id * 31L + msg.MsgId;
+        id = id * 31L + msg.SenderId;
+        id = id * 31L + msg.Timestamp.Ticks;
+        id = id * 31L + msg.StickerId;
+        id = id * 31L + (msg.Text?.GetHashCode() ?? 0);
+        return id;
     }
 
     // Compact timestamp (HH:mm — the game drops seconds in its bubble layout).
