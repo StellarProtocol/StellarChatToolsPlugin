@@ -9,8 +9,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// Channel READ-tabs — a NEW concept distinct from the composer's send-target. A segmented-pill tab bar filters
 /// the log to one <see cref="ChatChannel"/> bucket (All = no filter; Current = Say). Each tab is tinted with its
-/// channel's colour (the same theme slots the message rows use; All = the theme accent): the active tab is bold on
-/// a low-alpha pill of that colour, inactive tabs are a muted shade of it. Tabs with messages newer than last-viewed
+/// channel's colour (the same theme slots the message rows use; All = the theme accent). Every label is bold; the
+/// active tab is the full colour on a low-alpha pill of it, inactive tabs are a muted shade of it. Tabs with messages newer than last-viewed
 /// show a small red unread-dot icon. History-replay messages (<see cref="ChatMessage.IsHistory"/>) never count as
 /// unread, and while All is open every shown message counts as seen for its channel tab.
 /// </summary>
@@ -206,9 +206,10 @@ public sealed partial class Plugin
     // width — they can never overflow.
     //
     // Each segment: CellElement(Weight:1) → SelectableElement (click = SetActiveTab) → ConditionalElement(active) →
-    // one of TWO complete BubbleElements: the ACTIVE bubble (bold label, channel-colour pill via FillColorFn) or the
-    // INACTIVE bubble (regular label, static transparent fill). Two bubbles because TextElement.Emphasis (bold) is a
-    // build-time flag, not a Func. The Cond wraps the WHOLE bubble rather than sitting inside it — a SetActive-toggled
+    // one of TWO complete BubbleElements: the ACTIVE bubble (channel-colour pill via FillColorFn, full-colour label,
+    // NO unread-dot slot) or the INACTIVE bubble (static transparent fill, muted label + the constant-width dot slot).
+    // Both labels are bold. One bubble with Func fill/colour can't replace the pair: the dot slot exists only in the
+    // inactive state, and toggling it would be exactly the width-swinging inner Cond warned about next. The Cond wraps the WHOLE bubble rather than sitting inside it — a SetActive-toggled
     // Cond among a bubble's width-measured descendants makes it re-solve on stale layout (WindowBuilder-Patterns.md
     // "Never put a ConditionalElement INSIDE the bubble's measured child"). The pill FILL spans the full segment
     // because both CellElement and the SelectableElement host force-expand their child's width (the host also
@@ -255,14 +256,14 @@ public sealed partial class Plugin
     // same width, so the bubble's measured width cannot swing when it toggles.
     //
     // The ACTIVE variant gets NO dot slot: its channel is the one being viewed, so HasUnread is always false for it
-    // (SetActiveTab / NoteIncoming keep its last-seen current). Reserving the slot there pushed the bold label ~5 px
+    // (SetActiveTab / NoteIncoming keep its last-seen current). Reserving the slot there pushed the label ~5 px
     // left of the pill's centre. Dropping it can't shift neighbours — the segment width comes from the Weight:1 cell,
     // not from this content.
     private HudElement BuildTabLabel(ChatTab tab, bool active)
     {
         var label = new TextElement(() => _loc.T(TabLabelKey(tab)),
             active ? () => TabActiveText(tab) : () => TabMutedText(tab),
-            Emphasis: active, Align: TextAlign.Center);
+            Emphasis: true, Align: TextAlign.Center);   // every tab is bold — state reads from colour + the pill
         if (active) return new RowElement(new HudElement[] { label }, Justify: RowJustify.Center);
         return BuildInactiveTabLabel(tab, label);
     }
