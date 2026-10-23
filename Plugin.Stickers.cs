@@ -178,7 +178,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return;
         NoteSelfSendSticker(SendChannel(), configId);   // .Bubbles.cs — learn our identity from the sticker echo
         _chat.SendSticker(target, configId);
-        StartSendCooldown();   // .SendCooldown.cs
+        NoteSendDispatched(null);   // .SendCooldown.cs — no draft to restore for a sticker
         JumpLogToBottom();   // .NewBelow.cs — own send: follow it to the bottom
     }
 

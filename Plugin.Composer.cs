@@ -154,6 +154,9 @@ public sealed partial class Plugin
         _ => null,
     };
 
+    // Allocation-free "is there someone to send to" (polled every refresh by CanSendNow); mirrors ResolveTarget.
+    private bool HasSendTarget() => _sendTargetIndex != 4 || _replyTarget is { SenderId: not 0 };
+
     // Enter and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the draft: the field's
     // Enter strip already left the text in place, and _inputText is only cleared on a real send.
     private void DoSend()
@@ -163,7 +166,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return;
         NoteSelfSend(SendChannel(), _inputText);   // .Bubbles.cs — learn our identity from the echo
         _chat.Send(target, _inputText);            // game dispatcher — no packet construction, no local echo
-        StartSendCooldown();                       // .SendCooldown.cs — World / Current only
+        NoteSendDispatched(_inputText);            // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
         JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
     }
@@ -176,7 +179,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return false;
         NoteSelfSend(SendChannel(), phrase);   // .Bubbles.cs
         _chat.Send(target, phrase);
-        StartSendCooldown();                   // .SendCooldown.cs
+        NoteSendDispatched(null);              // .SendCooldown.cs — a phrase never touches the draft
         JumpLogToBottom();   // .NewBelow.cs
         return true;
     }

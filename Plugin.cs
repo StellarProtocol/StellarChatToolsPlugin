@@ -99,6 +99,9 @@ public sealed partial class Plugin : IStellarPlugin
         // whisper auto-reply. The handler early-outs when auto-reply is off, so the only cost of being
         // always-subscribed is the unread bookkeeping we need regardless of the window being open.
         _chat.MessageReceived += OnChatMessage;   // fires on the Unity main thread
+        // The server's verdict on each send (.SendCooldown.cs): ends the optimistic Send hold, flashes a refusal, and
+        // restores a refused draft. The cooldown length itself is polled from IChat.TryGetSendCooldown.
+        _chat.SendResult += OnSendResult;
 
         // Sticker right-click menu (.Favorites.cs): a cursor-positioned click-away popup; the Update hook only
         // re-asserts its rect once the window has remounted after SetVisible(true).
@@ -114,6 +117,7 @@ public sealed partial class Plugin : IStellarPlugin
     public void Dispose()
     {
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
+        try { _chat.SendResult -= OnSendResult; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
