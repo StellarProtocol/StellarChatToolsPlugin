@@ -12,7 +12,9 @@ namespace Stellar.ChatTools;
 ///
 /// Clicking a cell APPENDS the tag to <see cref="_inputText"/>; the composer's InputElement Get() binding re-seeds the
 /// field on the next poll (framework FieldBinding diffs on Get(), so the external change shows without fighting live
-/// typing). The picker stays open so several emoji can be inserted in a row. The send path (DoSend → IChat.Send) passes
+/// typing). The picker stays open so several emoji can be inserted in a row. Each click also bumps
+/// <see cref="_composerFocusSeq"/> (the composer's InputElement.FocusRequest), so the field regains focus with the caret at
+/// the end — the click on the cell would otherwise leave the box unfocused. The send path (DoSend → IChat.Send) passes
 /// the text through unescaped, so the tag goes out exactly as if typed by hand.
 /// </summary>
 public sealed partial class Plugin
@@ -34,10 +36,12 @@ public sealed partial class Plugin
     }
 
     // Append the tag to the draft. Refuse (rather than truncate) when it would overflow the 140 cap: SetInput's
-    // Substring would otherwise cut the tag in half and send a literal "<sprit" fragment.
+    // Substring would otherwise cut the tag in half and send a literal "<sprit" fragment. Focus goes back to the composer
+    // either way (bumped before the cap check), so a refused pick still leaves the user typing/deleting in the box.
     private void OnPickEmoji(int idx)
     {
         if (idx < 0 || idx >= EmojiCount) return;
+        _composerFocusSeq++;   // composer FocusRequest: hand the keyboard back to the field (caret at end) after the click
         var tag = EmojiTags[idx];
         if (_inputText.Length + tag.Length > MaxMessageLength) return;
         _inputText += tag;   // FieldBinding re-seeds the composer field from Get() on the next poll

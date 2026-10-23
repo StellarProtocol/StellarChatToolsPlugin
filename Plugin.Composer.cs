@@ -21,6 +21,9 @@ public sealed partial class Plugin
     private ChatMessage? _replyTarget;   // the whisper being replied to (set by clicking a whisper row)
 
     private string _inputText = string.Empty;
+    // Bumped per emoji-picker click; the composer InputElement.FocusRequest polls it and refocuses the field (caret at
+    // the end) on each change, so the user keeps typing after picking. Stickers send at once — they don't bump it.
+    private int _composerFocusSeq;
     private bool _quickOpen;
     private string _quickEditText = string.Empty;
     private List<string> _quickPhrases = new();   // user-configurable; populated by LoadConfig
@@ -73,7 +76,7 @@ public sealed partial class Plugin
                 new ButtonElement(() => "＋", ToggleQuickPhrases, Active: () => _quickOpen, Width: 30f),
                 // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs).
                 new ButtonElement(() => "☺", ToggleStickerPicker, Active: () => _stickerOpen, Width: 30f),
-                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput) { AutoFocus = true, RichEmoji = true }, Weight: 1f),
+                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput) { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq }, Weight: 1f),
                 new TextElement(() => CharCounter(), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
                 new ButtonElement(() => _loc.T("chat.send"), DoSend),
             }, Gap: 4f),
