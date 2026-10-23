@@ -11,11 +11,17 @@ namespace Stellar.ChatTools;
 /// header) over the log] — so the right pane IS the normal log (.Log.cs) with a per-peer filter: no second list
 /// implementation, and a hidden Cond contributes neither width nor a row gap (an inactive child is skipped by the layout).
 ///
-/// Window minimum: the header row is <see cref="RowElement.ConstrainsWindowMinWidth"/> with a fixed-width
-/// <see cref="WhisperPaneMinWidth"/> cell, so while Whisper is open the window can't be narrower than list + gap + that
-/// pane (≈ 800, vs ≈ 621 for the tab row in English). The LOG row itself must NOT be marked: every bubble built under a
-/// marked row is NoCap (hugs its natural width, ignores MaxWidth — WindowBuilder-Patterns.md), which would stop long
-/// messages wrapping.
+/// Width: the pane is FLEXIBLE — its Weight cell (min 0) takes window content − list − gap, so the log fills exactly the
+/// space beside the list. Nothing inside the pane may carry a fixed min width: a min-width child overflows its squeezed
+/// Weight cell (the cell's VLG clamps the child UP to its min), which is how a fixed 600 header cell once pushed the whole
+/// log off the window's right edge. The pane's floor (<see cref="WhisperPaneMinWidth"/> = one full-width bubble row)
+/// is carried by a separate invisible marker row instead: <see cref="RowElement.ConstrainsWindowMinWidth"/> over a
+/// Weight cell (min 0) holding a fixed spacer, so the row is laid out at the pane's real width while its PREFERRED width
+/// is the floor — MeasureMinWidth's delta (preferred − laid-out) then widens the window by exactly the shortfall. A
+/// FIXED-width cell there would not work: min == preferred, so the row is laid out at its preferred width even while
+/// overflowing, the delta reads 0 and the window never widens. The LOG row itself must NOT be marked: every bubble built
+/// under a marked row is NoCap (hugs its natural width, ignores MaxWidth — WindowBuilder-Patterns.md), which would stop
+/// long messages wrapping.
 ///
 /// List rows: [unread dot slot] [avatar] [name (bold, online dot before it) / one-line preview]. The text column is a
 /// fixed-width cell placed LAST, so a long name or preview overflows only to the right, where the list viewport's own
@@ -27,7 +33,12 @@ public sealed partial class Plugin
 {
     private const float ConvListWidth       = 170f;
     private const float WhisperPaneGap      = 6f;
-    private const float WhisperPaneMinWidth = 600f;   // right pane floor → window min ≈ 170 + 6 + 600 + window padding
+    // Right pane floor = the widest bubble row (.Bubbles.cs: avatar · bubble at its cap · time, plus the three row gaps
+    // around the bubble and before the gutter) + the log viewport's scrollbar lane = 425, so a long whisper wraps INSIDE
+    // the pane instead of shoving the avatar past its edge. Window min ≈ 12 + 170 + 6 + 425 + 12 = 625 — about the 621
+    // the tab row already asks for in English, so opening Whisper barely moves it.
+    private const float LogScrollbarLane    = 9f;     // framework VirtualList viewport offsetMax.x = −9
+    private const float WhisperPaneMinWidth = AvatarSize + BubbleMaxWidth + TimeColWidth + 3f * RowGap + LogScrollbarLane;
     private const float ConvRowHeight       = 50f;    // uniform VirtualList pitch (row content ≈ 47)
     private const int   ConvPoolSize        = 24;     // ≈ 960 px max viewport ÷ 50 + buffer
     private const int   ConvAvatarSize      = 32;
@@ -73,11 +84,12 @@ public sealed partial class Plugin
     }, Gap: WhisperPaneGap);
 
     // ── Header ──────────────────────────────────────────────────────────────────────────────────────────────────────
-    // [Name] [Lv.N] [● online] — or a muted "pick a conversation" prompt. Fixed-width cell inside a min-width row (see the
-    // class note); the row has no bubble, so the NoCap rule doesn't matter here.
-    private HudElement BuildWhisperHeader() => new RowElement(new HudElement[]
+    // [Name] [Lv.N] [● online] — or a muted "pick a conversation" prompt — over the pane's width-floor marker (see the
+    // class note). The text row is NOT marked (a long name must not widen the window) and its texts report min 0, so it
+    // never forces the pane wider. Gap 0.01 = a real zero (0 = the default 12), so the marker adds no height.
+    private HudElement BuildWhisperHeader() => new ColumnElement(new HudElement[]
     {
-        new CellElement(new RowElement(new HudElement[]
+        new RowElement(new HudElement[]
         {
             new TextElement(HeaderTitle, () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
                 Emphasis: true, NoWrap: true),
@@ -87,8 +99,14 @@ public sealed partial class Plugin
                 new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize),
                 new TextElement(() => _loc.T("chat.whisper.online"), MutedCol, NoWrap: true),
             }, Gap: 4f)),
-        }, Gap: 8f), Width: WhisperPaneMinWidth),
-    }) { ConstrainsWindowMinWidth = true };
+        }, Gap: 8f),
+        // Zero-height marker: Weight cell (min 0, preferred = the spacer's width) → laid out at the pane's real width.
+        // No bubble under it, so the NoCap rule doesn't bite.
+        new RowElement(new HudElement[]
+        {
+            new CellElement(new SpacerElement(Width: WhisperPaneMinWidth), Weight: 1f),
+        }) { ConstrainsWindowMinWidth = true },
+    }, Gap: 0.01f);
 
     private string HeaderTitle() => _selectedPeer != 0 ? PeerName(_selectedPeer) : _loc.T("chat.whisper.pick");
 
