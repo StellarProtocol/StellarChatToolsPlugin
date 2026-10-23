@@ -15,6 +15,8 @@
   "chat.cooldown": "Cooldown: {0:0}s bawat nagpadala",
   "chat.emoji.button": "Emoji",
   "chat.hotkey.toggle": "I-toggle ang bintana ng ChatTools",
+  "chat.newBelow.many": "↓ {0} bagong mensahe",
+  "chat.newBelow.one": "↓ {0} bagong mensahe",
   "chat.prefix.guild": "[Guild]",
   "chat.prefix.party": "[Party]",
   "chat.prefix.say": "[Sabihin]",

@@ -23,6 +23,7 @@ public sealed partial class Plugin
     {
         BuildTabBar(),       // .Tabs.cs
         BuildLogScroll(),    // .Log.cs — the only flexible-height section; grows with the window
+        BuildNewBelowBar(),  // .NewBelow.cs — "↓ N new messages" pill, shown only while scrolled up with unseen rows
         BuildComposer(),     // .Composer.cs
         BuildSettingsDrawer(),
     }, Gap: 6f);

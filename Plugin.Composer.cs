@@ -163,6 +163,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return;
         NoteSelfSend(SendChannel(), _inputText);   // .Bubbles.cs — learn our identity from the echo
         _chat.Send(target, _inputText);            // game dispatcher — no packet construction, no local echo
+        JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
     }
 
@@ -172,6 +173,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return;
         NoteSelfSend(SendChannel(), phrase);   // .Bubbles.cs
         _chat.Send(target, phrase);
+        JumpLogToBottom();   // .NewBelow.cs
     }
 
     private void SetReply(ChatMessage msg)

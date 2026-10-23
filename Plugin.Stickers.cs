@@ -155,6 +155,7 @@ public sealed partial class Plugin
         if (ResolveTarget() is not { } target) return;
         NoteSelfSendSticker(SendChannel(), configId);   // .Bubbles.cs — learn our identity from the sticker echo
         _chat.SendSticker(target, configId);
+        JumpLogToBottom();   // .NewBelow.cs — own send: follow it to the bottom
     }
 
     private HudElement BuildStickerPopover() => new PanelElement(new ColumnElement(new HudElement[]

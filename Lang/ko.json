@@ -15,6 +15,8 @@
   "chat.cooldown": "쿨타임: 발신자당 {0:0}초",
   "chat.emoji.button": "이모지",
   "chat.hotkey.toggle": "채팅 도구 창 전환",
+  "chat.newBelow.many": "↓ 새 메시지 {0}개",
+  "chat.newBelow.one": "↓ 새 메시지 {0}개",
   "chat.prefix.guild": "[길드]",
   "chat.prefix.party": "[파티]",
   "chat.prefix.say": "[주변]",

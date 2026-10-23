@@ -40,6 +40,7 @@ public sealed partial class Plugin
     {
         if (!_tabResetPending) return false;
         _tabResetPending = false;
+        ResetNewBelow();   // .NewBelow.cs — the re-pin lands at the bottom, so nothing is left unseen below
         return true;
     }
 
@@ -90,6 +91,10 @@ public sealed partial class Plugin
             // re-maps a filtered index to a DIFFERENT message at constant Count (which otherwise leaves a tall sticker
             // row sized by a short text row's stale cached height → permanent overlap). See StableRowId.
             RowId          = StableRowId,
+            // "↓ N new messages" bar (.NewBelow.cs): the list reports its own at-bottom pin decision, and a bump of
+            // the token jumps to the newest row + re-pins (following unmeasured bottom rows until they settle).
+            OnAtBottomChanged     = OnLogAtBottomChanged,
+            ScrollToBottomRequest = () => _scrollToBottomSeq,
         };
     }
 

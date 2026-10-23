@@ -72,6 +72,7 @@ public sealed partial class Plugin
         // Hidden rows (.Log.cs IsUnrenderable) and history never contribute to unread — they never occupy a log row.
         // Mirror the IsHistory early-return: bail BEFORE touching _newest/_lastSeen, leaving _logDirty set as above.
         if (IsUnrenderable(msg) || msg.IsHistory) return;
+        NoteNewBelow(msg);   // .NewBelow.cs — counts it for the "↓ N new messages" bar if scrolled up + in the active tab
         if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
         // The active tab is "being viewed", so a message for it is seen immediately (never shows unread).
         if (TabChannel(_activeTab) is { } active && active == msg.Channel && msg.MsgId > SeenFor(_activeTab))
@@ -85,7 +86,7 @@ public sealed partial class Plugin
 
     private void SetActiveTab(ChatTab tab)
     {
-        if (tab != _activeTab) _tabResetPending = true;   // .Log.cs — re-pin the log to bottom + re-measure heights (ResetScroll)
+        if (tab != _activeTab) { _tabResetPending = true; ResetNewBelow(); }   // .Log.cs — re-pin the log to bottom + re-measure heights (ResetScroll); .NewBelow.cs — new tab, nothing pending below
         _activeTab = tab;
         if (TabChannel(tab) is { } ch) _lastSeen[tab] = NewestFor(ch);   // opening a tab clears its unread
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
