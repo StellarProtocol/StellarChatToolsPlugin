@@ -87,7 +87,8 @@ public sealed partial class Plugin : IStellarPlugin
                     MaxWidth = 1000f, MaxHeight = 1100f,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
-                OnClose: () => _window!.SetVisible(false)),
+                TitleTrailing: BuildTitleGear(),   // .Window.cs — settings ⚙ in the title bar, before the ✕
+                OnClose: () => { CloseTargetMenu(); _window!.SetVisible(false); }),   // .SendTarget.cs — don't strand the picker
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -103,6 +104,9 @@ public sealed partial class Plugin : IStellarPlugin
         // re-asserts its rect once the window has remounted after SetVisible(true).
         _favMenuWindow = RegisterFavMenuWindow();
         _services.Framework.Update += TickFavMenuPlace;
+        // Send-target picker (.SendTarget.cs): same cursor-popup pattern as the sticker menu.
+        _targetMenuWindow = RegisterTargetMenuWindow();
+        _services.Framework.Update += TickTargetMenu;
         // Avatar decodes (.Avatars.cs) run here under a fixed per-tick budget — never inside the window apply.
         _services.Framework.Update += TickAvatarDecode;
     }
@@ -111,6 +115,7 @@ public sealed partial class Plugin : IStellarPlugin
     {
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         _sayColor.Dispose();
         _worldColor.Dispose();
@@ -120,6 +125,7 @@ public sealed partial class Plugin : IStellarPlugin
         _systemColor.Dispose();
         _window.Remove();
         _favMenuWindow?.Remove();
+        _targetMenuWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }

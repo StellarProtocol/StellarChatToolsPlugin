@@ -6,10 +6,11 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// The send composer, restyled to the game's layout: a "Send to [channel ▾]" dropdown over a compact input
-/// row (a ＋ button that opens quick phrases, the text field, a 0/140 char counter, and Send). The target
-/// defaults to the active read-tab's channel but is overridable; whisper is reply-based. No local echo —
-/// sends round-trip via MessageReceived (and teach us our own identity for right-aligning, see Bubbles).
+/// The send composer: ONE row of equal-height (28) controls — a channel-coloured target chip (.SendTarget.cs), ＋ (quick
+/// phrases), ☺ (stickers/emoji), the text field (placeholder follows the target), a counter shown only near the 140 cap,
+/// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings moved to the
+/// title-bar gear (.Window.cs). The target defaults to the active read-tab's channel but is overridable; whisper is
+/// reply-based. No local echo — sends round-trip via MessageReceived (and teach us our own identity, see Bubbles).
 /// </summary>
 public sealed partial class Plugin
 {
@@ -27,10 +28,6 @@ public sealed partial class Plugin
     private bool _quickOpen;
     private string _quickEditText = string.Empty;
     private List<string> _quickPhrases = new();   // user-configurable; populated by LoadConfig
-
-    // Send-target button keys (reuse the existing channel keys; whisper is new in this redesign).
-    private static readonly string[] TargetKeys =
-        { "chat.channel.say", "chat.channel.world", "chat.channel.party", "chat.channel.guild", "chat.channel.whisper" };
 
     // Default the composer target to the opened read-tab's channel (overridable afterwards). All/System don't
     // map to a send target, so they leave the current selection untouched. In-memory only (not persisted —
@@ -51,15 +48,6 @@ public sealed partial class Plugin
     {
         return new ColumnElement(new HudElement[]
         {
-            // "Send to [channel ▾]" — the game's target selector, as a dropdown. Settings gear parked on the right.
-            new RowElement(new HudElement[]
-            {
-                new TextElement(() => _loc.T("chat.sendTo"), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
-                new DropdownElement(() => _sendTargetIndex, TargetOptions, OnPickTarget, Width: 120f),
-                new SpacerElement(),
-                new ButtonElement(() => _loc.T("chat.settings.button"), ToggleSettings, Active: () => _settingsOpen),
-            }, Gap: 6f) { ConstrainsWindowMinWidth = true },   // never narrower than this row needs (any language)
-
             // Whisper reply state: who we're replying to (+ cancel), or a hint to pick a whisper row.
             new ConditionalElement(() => _sendTargetIndex == 4 && _replyTarget != null, new RowElement(new HudElement[]
             {
@@ -69,18 +57,22 @@ public sealed partial class Plugin
             new ConditionalElement(() => _sendTargetIndex == 4 && _replyTarget == null,
                 new TextElement(() => _loc.T("chat.reply.hint"), () => _services.Theme.Colors.MenuMuted)),
 
-            // Input row: ＋ (quick-phrase entry seam) · text field · 0/140 counter · Send. The field is wrapped
-            // in a weighted cell so the dark rounded input stretches across the row like the game's composer.
+            // ONE composer row: [target chip ▾] [＋] [☺] [text field …] [n/140 near the cap] [Send]. Every control is
+            // a 28-unit pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
+            // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
             new RowElement(new HudElement[]
             {
-                new ButtonElement(() => "＋", ToggleQuickPhrases, Active: () => _quickOpen, Width: 30f),
+                BuildTargetChip(),   // .SendTarget.cs — channel-coloured chip, click = target picker menu
+                BuildPill(() => "＋", () => _services.Theme.Colors.MenuText, () => ToolPillFill(_quickOpen), ToggleQuickPhrases),
                 // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs).
-                new ButtonElement(() => "☺", ToggleStickerPicker, Active: () => _stickerOpen, Width: 30f),
-                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput) { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq }, Weight: 1f),
-                new TextElement(() => CharCounter(), () => _services.Theme.Colors.MenuMuted, NoWrap: true),
-                new ButtonElement(() => _loc.T("chat.send"), DoSend),
-            // Min-width row too. The input is pinned at 160 (typing never grows it); only the counter's digit count
-            // (0→140) moves its natural width, by a few units — far below the tab row's requirement, which wins.
+                BuildPill(() => "☺", () => _services.Theme.Colors.MenuText, () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
+                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
+                    { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder }, Weight: 1f),
+                new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
+                BuildSendPill(),     // .SendCooldown.cs — channel-coloured; greyed + "Ns" while empty / cooling down
+            // Min-width row (any language): the input is pinned at 160 (typing never grows it); the chip's label, the
+            // Send/"Ns" label and the near-cap counter move its natural width by a few tens of units — still well
+            // below the tab row's requirement, which wins.
             }, Gap: 4f) { ConstrainsWindowMinWidth = true },
 
             // Quick-phrases popover: click a phrase to send it to the current target, then close.
@@ -97,18 +89,13 @@ public sealed partial class Plugin
         if (_quickOpen) _stickerOpen = false;
     }
 
-    // Localized dropdown option list (Say/World/Party/Guild/Whisper), rebuilt each open so a language switch
-    // is reflected. The dropdown is index-based, so the picked index maps straight to the send target.
-    private IReadOnlyList<string> TargetOptions()
-    {
-        var opts = new string[TargetKeys.Length];
-        for (int i = 0; i < TargetKeys.Length; i++) opts[i] = _loc.T(TargetKeys[i]);
-        return opts;
-    }
+    // ＋ / ☺ pill fill: the recessed track tint at rest (the tab strip's track), the accent pill while its popover is open.
+    private ColorRgba? ToolPillFill(bool open) => open ? _services.Theme.Colors.MenuAccent with { A = TabPillAlpha } : TabTrackFill;
 
+    // A pick from the target menu (.SendTarget.cs) — index-based like the old dropdown, and persisted as the default.
     private void OnPickTarget(int index)
     {
-        if (index < 0 || index >= TargetKeys.Length) return;
+        if (index < 0 || index >= TargetTabs.Length) return;
         _sendTargetIndex = index;
         SaveSendTarget();
     }
@@ -116,8 +103,6 @@ public sealed partial class Plugin
     // Soft-cap the field to the game's 140 chars; the FieldBinding re-seeds the field from _inputText on the
     // next poll, so a truncation shows immediately.
     private void SetInput(string s) => _inputText = s.Length > MaxMessageLength ? s.Substring(0, MaxMessageLength) : s;
-
-    private string CharCounter() => _inputText.Length + "/" + MaxMessageLength;
 
     // Index -> the channel the echo of a send will arrive on (for self-identity round-trip learning).
     private ChatChannel SendChannel() => _sendTargetIndex switch
@@ -135,7 +120,8 @@ public sealed partial class Plugin
         for (int i = 0; i < MaxQuickPhrases; i++)
         {
             var idx = i;
-            slots[idx] = new ButtonElement(() => QuickPhrase(idx), () => { SendPhrase(QuickPhrase(idx)); _quickOpen = false; });
+            // Close only on a real send — a phrase refused by the cooldown leaves the popover open to retry.
+            slots[idx] = new ButtonElement(() => QuickPhrase(idx), () => { if (SendPhrase(QuickPhrase(idx))) _quickOpen = false; });
         }
         return new PanelElement(new ColumnElement(new HudElement[]
         {
@@ -159,23 +145,31 @@ public sealed partial class Plugin
         _ => null,
     };
 
+    // Enter and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the draft: the field's
+    // Enter strip already left the text in place, and _inputText is only cleared on a real send.
     private void DoSend()
     {
         if (string.IsNullOrWhiteSpace(_inputText)) return;
+        if (CoolingDown()) return;                 // .SendCooldown.cs
         if (ResolveTarget() is not { } target) return;
         NoteSelfSend(SendChannel(), _inputText);   // .Bubbles.cs — learn our identity from the echo
         _chat.Send(target, _inputText);            // game dispatcher — no packet construction, no local echo
+        StartSendCooldown();                       // .SendCooldown.cs — World / Current only
         JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
     }
 
-    private void SendPhrase(string phrase)
+    // True when the phrase was actually sent (false: blank, no target, or the target is cooling down).
+    private bool SendPhrase(string phrase)
     {
-        if (string.IsNullOrWhiteSpace(phrase)) return;
-        if (ResolveTarget() is not { } target) return;
+        if (string.IsNullOrWhiteSpace(phrase)) return false;
+        if (CoolingDown()) return false;       // .SendCooldown.cs
+        if (ResolveTarget() is not { } target) return false;
         NoteSelfSend(SendChannel(), phrase);   // .Bubbles.cs
         _chat.Send(target, phrase);
+        StartSendCooldown();                   // .SendCooldown.cs
         JumpLogToBottom();   // .NewBelow.cs
+        return true;
     }
 
     private void SetReply(ChatMessage msg)

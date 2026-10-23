@@ -30,7 +30,36 @@ public sealed partial class Plugin
 
     private void ToggleSettings() => _settingsOpen = !_settingsOpen;
 
-    // Settings drawer (gear-toggled). Migrates the auto-reply UI and adds a font-size control, the quick-phrase
+    private const string GearResource = "Stellar.ChatTools.Assets.settings_gear.png";
+    private byte[]? _gearPng;   // embedded gear icon, read once
+    private bool _gearTried;
+
+    // Title-bar ⚙ (WindowRegistration.TitleTrailing — the chrome builds it right-aligned, just before the ✕). Same
+    // icon + 15px-in-a-cell shape as the CooldownBar/StatInspector header gears; those windows are Borderless so their
+    // gear sits in a self-drawn body header, while this GlassMenu window has a real title bar to host it. A PNG, not
+    // the ⚙ glyph (no in-game font coverage). Row(Justify.Center) wrapper: the Selectable force-expands its child's
+    // width, so a bare 15px image would be stretched to the cell's inner width (WindowBuilder-Patterns.md). Selected =
+    // drawer open, so the gear reads as a toggle.
+    private HudElement BuildTitleGear() => new CellElement(
+        new SelectableElement(
+            new RowElement(new HudElement[] { new ImageElement(GearPng, 15, 15) }, Justify: RowJustify.Center),
+            OnClick: ToggleSettings, Selected: () => _settingsOpen),
+        Width: 27f);
+
+    private byte[]? GearPng()
+    {
+        if (_gearTried) return _gearPng;
+        _gearTried = true;
+        try
+        {
+            using var s = typeof(Plugin).Assembly.GetManifestResourceStream(GearResource);
+            if (s != null) { using var ms = new System.IO.MemoryStream(); s.CopyTo(ms); _gearPng = ms.ToArray(); }
+        }
+        catch (Exception ex) { _services.Log.Warning($"[ChatTools] settings gear icon load failed: {ex.Message}"); }
+        return _gearPng;
+    }
+
+    // Settings drawer (title-bar gear-toggled). Migrates the auto-reply UI and adds a font-size control, the quick-phrase
     // editor, and a one-line pointer to where the channel colours are edited.
     private HudElement BuildSettingsDrawer() => new ConditionalElement(() => _settingsOpen, new ColumnElement(new HudElement[]
     {

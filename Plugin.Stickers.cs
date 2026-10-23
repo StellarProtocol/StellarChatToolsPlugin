@@ -159,6 +159,9 @@ public sealed partial class Plugin
     // Shared by the pack grid and the Favorites grid, so a favorite sends exactly like a click in its own pack tab.
     private void SendStickerAndClose(int id)
     {
+        // Cooling-down target (.SendCooldown.cs): refuse like text and keep the picker open, so the user can retry once
+        // the Send pill's countdown ends.
+        if (CoolingDown()) return;
         SendSticker(id);
         _stickerOpen = false;   // close on pick, like the quick-phrase popover
         CloseFavMenu();
@@ -171,9 +174,11 @@ public sealed partial class Plugin
     // NoteSelfSendSticker / LearnSelfFromEcho (Plugin.Bubbles.cs).
     private void SendSticker(int configId)
     {
+        if (CoolingDown()) return;   // .SendCooldown.cs — stickers share the channel's cooldown with text
         if (ResolveTarget() is not { } target) return;
         NoteSelfSendSticker(SendChannel(), configId);   // .Bubbles.cs — learn our identity from the sticker echo
         _chat.SendSticker(target, configId);
+        StartSendCooldown();   // .SendCooldown.cs
         JumpLogToBottom();   // .NewBelow.cs — own send: follow it to the bottom
     }
 

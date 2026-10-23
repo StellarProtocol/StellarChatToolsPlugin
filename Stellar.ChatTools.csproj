@@ -29,6 +29,9 @@
     <EmbeddedResource Include="Assets/favorite_star.png" LogicalName="Stellar.ChatTools.Assets.favorite_star.png" />
     <!-- Channel-tab unread dot (32x32, shown at 8 px), read once via GetManifestResourceStream (Plugin.Tabs.cs). -->
     <EmbeddedResource Include="Assets/unread_dot.png" LogicalName="Stellar.ChatTools.Assets.unread_dot.png" />
+    <!-- Title-bar settings gear (same icon CooldownBar/StatInspector ship; the ⚙ glyph has no in-game font coverage),
+         read once via GetManifestResourceStream (Plugin.Window.cs). -->
+    <EmbeddedResource Include="Assets/settings_gear.png" LogicalName="Stellar.ChatTools.Assets.settings_gear.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
        reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences
