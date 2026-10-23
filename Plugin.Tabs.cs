@@ -25,9 +25,9 @@ public sealed partial class Plugin
 
     private const string UnreadDotResource = "Stellar.ChatTools.Assets.unread_dot.png";
     private const int    UnreadDotSize     = 8;      // display px of the 32x32 dot PNG
-    private const float  UnreadDotGap      = 2f;     // label → dot-slot gap (inactive variant)
-    // Total width the inactive variant reserves after its label (gap + dot slot). The active variant reserves the
-    // SAME total, split half each side of its label, so a tab is the same width active or inactive.
+    private const float  UnreadDotGap      = 2f;     // label → dot-slot gap
+    // Total width reserved after the label (gap + dot slot), in every state. The SAME width is reserved before the
+    // label too, so the label stays centred and a tab is the same width active or inactive, dot or no dot.
     private const float  TabDotSlotWidth   = UnreadDotGap + UnreadDotSize;
     private const float  TabPillAlpha      = 0.25f;  // active pill = channel colour at this alpha
     private const float  TabMutedMix       = 0.55f;  // inactive text = 55% channel colour, 45% window background
@@ -210,18 +210,16 @@ public sealed partial class Plugin
     // Weight:1 is NOT an equal split, though: each segment is its content's preferred width + an equal share of the
     // leftover, so segments differ per label. What matters is that each segment's width never changes with state.
     //
-    // Each segment: CellElement(Weight:1) → SelectableElement (click = SetActiveTab) → ConditionalElement(active) →
-    // one of TWO complete BubbleElements: the ACTIVE bubble (channel-colour pill via FillColorFn, full-colour label,
-    // dot slot as equal spacers either side) or the INACTIVE bubble (static transparent fill, muted label + the
-    // constant-width dot slot). Both bubbles are bold with identical padding, so both report the same width. One
-    // bubble with Func fill/colour can't replace the pair: the dot exists only in the inactive state, and moving the
-    // slot from after the label to around it would be exactly the width-swinging inner Cond warned about next. The Cond wraps the WHOLE bubble rather than sitting inside it — a SetActive-toggled
-    // Cond among a bubble's width-measured descendants makes it re-solve on stale layout (WindowBuilder-Patterns.md
-    // "Never put a ConditionalElement INSIDE the bubble's measured child"). The pill FILL spans the full segment
-    // because both CellElement and the SelectableElement host force-expand their child's width (the host also
-    // force-expands the Cond, so it fills exactly like the bare bubble did). Colours and labels resolve through ()=>
-    // funcs, so a live language / theme / unread / active-tab change shows with no element-tree rebuild (the tree is
-    // built once — see Plugin.cs) and no per-refresh string allocation (the label is the catalog string as-is).
+    // Each segment: CellElement(Weight:1) → SelectableElement (click = SetActiveTab) → ONE BubbleElement whose content
+    // row is identical in every state (BuildTabLabel). Active vs inactive changes ONLY colours, through ()=> funcs: the
+    // pill fill (channel tint vs transparent) and the label colour (full vs muted). Every label is bold, so the old
+    // two-bubble ConditionalElement switch (bold active / regular inactive) is gone — and with it the drift: the two
+    // structurally different variants measured 16 px (~10 units) apart in-game (46b7bbf), because the inactive
+    // variant's gap + dot slot did not reach the bubble's measured width while the active variant's spacers did. The
+    // pill FILL spans the full segment because both CellElement and the SelectableElement host force-expand their
+    // child's width. Colours and labels resolve through funcs, so a live language / theme / unread / active-tab change
+    // shows with no element-tree rebuild (the tree is built once — see Plugin.cs) and no per-refresh string allocation
+    // (the label is the catalog string as-is).
     private HudElement BuildTabBar()
     {
         var cells = new List<HudElement>(Tabs.Length);
@@ -230,19 +228,15 @@ public sealed partial class Plugin
             var tab = t;   // capture
             cells.Add(new CellElement(
                 new SelectableElement(
-                    new ConditionalElement(() => _activeTab == tab,
-                        new BubbleElement(BuildTabLabel(tab, active: true))
-                        {
-                            CornerRadius = 8f, PaddingX = 2f, PaddingY = 7f,
-                            // The channel-colour pill. Re-pulled every refresh so a Theme slot edit re-tints it live.
-                            FillColorFn = () => TabPillFill(tab),
-                        },
-                        new BubbleElement(BuildTabLabel(tab, active: false))
-                        {
-                            // Explicit transparent (NOT null) — null falls back to the bubble's themed accent fill.
-                            CornerRadius = 8f, PaddingX = 2f, PaddingY = 7f, FillColor = Transparent,
-                        }),
-                    // No Selected: arg — the active bubble's pill is the SOLE active indicator. Passing Selected made the
+                    new BubbleElement(BuildTabLabel(tab))
+                    {
+                        // FillColor is the build-time (= restore-default) fill: explicit transparent, NOT null — null
+                        // falls back to the bubble's themed accent fill. FillColorFn re-pulls the channel pill every
+                        // refresh, so a Theme slot edit re-tints it live and inactive tabs stay see-through.
+                        CornerRadius = 8f, PaddingX = 2f, PaddingY = 7f, FillColor = Transparent,
+                        FillColorFn = () => _activeTab == tab ? TabPillFill(tab) : Transparent,
+                    },
+                    // No Selected: arg — the bubble's pill is the SOLE active indicator. Passing Selected made the
                     // Selectable draw its OWN accent fill behind the pill too (the doubled-pill look). Hover feedback is
                     // unaffected — the Selectable's hover wash is independent of Selected.
                     OnClick: () => SetActiveTab(tab)),
@@ -254,48 +248,34 @@ public sealed partial class Plugin
             { FillColor = TabTrackFill, CornerRadius = 10f, PaddingX = 4f, PaddingY = 4f };
     }
 
-    // Label + unread-dot slot, centred as a group. The toolkit has no overlay/absolute-position element, so the dot
-    // sits just AFTER the label, raised toward the cap line (superscript-style). Its slot is a CONSTANT width in both
-    // states (the dot branch and the empty-spacer branch both reserve UnreadDotSize, min AND preferred), so the dot
-    // appearing never re-flows the label — only a fixed ~10 px is reserved, which the tightened bubble PaddingX (4 → 2)
-    // mostly pays for at the 480 px minimum window width. This Cond IS inside the bubble, but both branches report the
-    // same width, so the bubble's measured width cannot swing when it toggles.
+    // The tab's content row, the SAME in every state: [left spacer = slot width] [bold label] [gap] [dot slot]. The
+    // left spacer mirrors the right gap + dot slot, so the label stays centred on its pill. The toolkit has no
+    // overlay/absolute-position element, so the dot sits inline just AFTER the label, raised toward the cap line.
     //
-    // The ACTIVE variant shows no dot (its channel is the one being viewed, so HasUnread is always false for it —
-    // SetActiveTab / NoteIncoming keep its last-seen current), but it must still reserve the SAME total width as the
-    // inactive slot. A Weight:1 cell is NOT an equal split: Unity gives it its content's PREFERRED width plus an equal
-    // share of the leftover, so segment widths track their content (measured in-game: All 68.6 vs Whisper 120.7 px).
-    // Dropping the slot from the active variant (fe5536a) made the active tab 10 px narrower than itself inactive, so
-    // every tab switch moved its neighbours. Instead the slot width is split in HALF on both sides of the label
-    // (5 + label + 5 == label + 2 gap + 8 dot), which keeps the bold label centred on its pill AND keeps each tab's
-    // width independent of active/inactive and unread state. Spacers with Width set pin min AND preferred width, so
-    // the two variants also report identical minimums when the row is squeezed.
-    private HudElement BuildTabLabel(ChatTab tab, bool active)
+    // Every width in this row comes from a SpacerElement with Width set (pins min AND preferred, flexible 0) or the
+    // label — never from the unread-dot ConditionalElement. The dot column is [Cond(dot) ; Spacer(UnreadDotSize x 5)]:
+    // a Column's preferred/min width is the MAX of its children, the spacer always reports UnreadDotSize, and both Cond
+    // branches (8 px image / 8 px spacer) are ≤ that — so the column is exactly UnreadDotSize wide whether the dot is
+    // shown, hidden, or its branch not yet lazily built. That matters because the Cond IS inside the bubble's measured
+    // child (WindowBuilder-Patterns.md warns a SetActive toggle there can be read on stale layout): with its width
+    // dominated by an always-present spacer, a stale read can't change the measured width. The spacer below the dot also
+    // lifts it above the label's centre line, and its Width keeps the slot from being squeezed (an ImageElement only
+    // sets a preferred size). The active tab never shows the dot (its channel is the one being viewed, so HasUnread is
+    // always false for it — SetActiveTab / NoteIncoming keep its last-seen current); the !active guard just makes it so.
+    private HudElement BuildTabLabel(ChatTab tab) => new RowElement(new HudElement[]
     {
-        var label = new TextElement(() => _loc.T(TabLabelKey(tab)),
-            active ? () => TabActiveText(tab) : () => TabMutedText(tab),
-            Emphasis: true, Align: TextAlign.Center);   // every tab is bold — state reads from colour + the pill
-        if (active) return new RowElement(new HudElement[]
+        new SpacerElement(Width: TabDotSlotWidth),
+        new TextElement(() => _loc.T(TabLabelKey(tab)),
+            () => _activeTab == tab ? TabActiveText(tab) : TabMutedText(tab),
+            Emphasis: true, Align: TextAlign.Center),   // every tab is bold — state reads from colour + the pill
+        new SpacerElement(Width: UnreadDotGap),
+        new ColumnElement(new HudElement[]
         {
-            new SpacerElement(Width: TabDotSlotWidth / 2f),
-            label,
-            new SpacerElement(Width: TabDotSlotWidth / 2f),
-        }, Gap: 0f, Justify: RowJustify.Center);
-        return BuildInactiveTabLabel(tab, label);
-    }
-
-    private HudElement BuildInactiveTabLabel(ChatTab tab, HudElement label) => new RowElement(new HudElement[]
-    {
-        label,
-        new ConditionalElement(() => HasUnread(tab),
-            new ColumnElement(new HudElement[]
-            {
+            new ConditionalElement(() => _activeTab != tab && HasUnread(tab),
                 // Row wrapper so the fixed-size image isn't width-stretched (WindowBuilder-Patterns.md force-expand).
                 new RowElement(new HudElement[] { new ImageElement(UnreadDotPng, UnreadDotSize, UnreadDotSize) }),
-                // Spacer below lifts the dot above the label's centre line; its Width also pins the slot's MIN width
-                // (an ImageElement only sets a preferred width, so a tight row could otherwise squeeze the dot).
-                new SpacerElement(Width: UnreadDotSize, Height: 5f),
-            }),
-            new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)),
-    }, Gap: UnreadDotGap, Justify: RowJustify.Center);
+                new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)),
+            new SpacerElement(Width: UnreadDotSize, Height: 5f),
+        }),
+    }, Gap: 0f, Justify: RowJustify.Center);
 }
