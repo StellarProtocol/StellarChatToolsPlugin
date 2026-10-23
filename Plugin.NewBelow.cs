@@ -47,6 +47,7 @@ public sealed partial class Plugin
     private void NoteNewBelow(ChatMessage msg)
     {
         if (_atBottom) return;
+        if (msg.Channel == ChatChannel.System) return;   // notices ("Obtained …") are ambient: they never raise the bar
         if (TabChannel(_activeTab) is { } ch && ch != msg.Channel) return;
         if (IsSelf(msg)) return;   // .Bubbles.cs — own sends jump to bottom (JumpLogToBottom), never count
         _newBelow++;

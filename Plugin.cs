@@ -56,7 +56,6 @@ public sealed partial class Plugin : IStellarPlugin
 
         RegisterColors();   // .Log.cs — must precede BuildRoot's colour Funcs resolving at draw time
         LoadConfig();       // .Config.cs — quick phrases, auto-reply, font size, default send target
-        SeedUnread();       // .Tabs.cs  — seed last-seen from existing log so history doesn't light tabs
 
         _window = _services.Windows.Register(
             new WindowRegistration(

@@ -37,11 +37,14 @@ public sealed partial class Plugin
     private byte[]? _unreadDotPng;   // embedded unread-dot icon, read once
     private bool _unreadDotTried;
 
-    // Unread bookkeeping. _newest = highest non-history MsgId seen per channel; _lastSeen = the _newest value
-    // captured when a tab was last opened. A channel tab is unread when its channel's _newest exceeds the tab's
-    // last-seen. Keyed off MsgId (not a bool) so it stays correct even if the framework log is a capped ring.
+    // Unread bookkeeping. _newest = the ARRIVAL sequence number of the newest live (non-history) shown message per
+    // channel; _lastSeen = the _newest value captured when a tab was last opened. A channel tab is unread when its
+    // channel's _newest exceeds the tab's last-seen. A plugin-side sequence, NOT MsgId: system notices carry a
+    // framework-made NEGATIVE MsgId (never "newer" than 0) and whisper MsgIds are per-peer, not monotonic. Messages
+    // already in the log at construction never got a sequence number, so the login history can't light a tab.
     private readonly Dictionary<ChatChannel, long> _newest = new();
     private readonly Dictionary<ChatTab, long> _lastSeen = new();
+    private long _arrivalSeq;
 
     // Tab -> the ChatChannel it filters to (All and anything unmapped => null = no filter / no unread).
     private static ChatChannel? TabChannel(ChatTab tab) => tab switch
@@ -66,21 +69,6 @@ public sealed partial class Plugin
         _               => "chat.tab.system",
     };
 
-    // Seed last-seen from the messages already in the log at construction so the login history replay doesn't
-    // light up every tab as "unread" on first open.
-    private void SeedUnread()
-    {
-        var m = _chat.RecentMessages;
-        for (int i = 0; i < m.Count; i++)
-        {
-            var msg = m[i];
-            if (msg.IsHistory || IsUnrenderable(msg)) continue;   // hidden rows (.Log.cs) never seed unread — they're never shown
-            if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
-        }
-        foreach (var tab in Tabs)
-            if (TabChannel(tab) is { } ch) _lastSeen[tab] = NewestFor(ch);
-    }
-
     private long NewestFor(ChatChannel ch) => _newest.TryGetValue(ch, out var v) ? v : 0L;
 
     // Called from the inbound handler for every received message (unread + log-dirty signal).
@@ -96,14 +84,15 @@ public sealed partial class Plugin
         if (msg.StickerId == 0 && !string.IsNullOrEmpty(msg.Text)) _services.Windows.PrewarmText(msg.Text);
         if (msg.IsHistory) return;
         NoteNewBelow(msg);   // .NewBelow.cs — counts it for the "↓ N new messages" bar if scrolled up + in the active tab
-        if (msg.MsgId > NewestFor(msg.Channel)) _newest[msg.Channel] = msg.MsgId;
+        long seq = ++_arrivalSeq;
+        _newest[msg.Channel] = seq;
         // The active tab is "being viewed", so a message for it is seen immediately (never shows unread). All shows
         // EVERY channel, so while it is open the message's own channel tab counts as seen too — otherwise reading
         // everything in All would still leave each channel tab lit. (A message arriving while a DIFFERENT channel
         // tab is open still lights its own tab.)
         var seenTab = _activeTab == ChatTab.All ? ChannelTab(msg.Channel) : _activeTab;
-        if (seenTab is { } t && TabChannel(t) == msg.Channel && msg.MsgId > SeenFor(t))
-            _lastSeen[t] = msg.MsgId;
+        if (seenTab is { } t && TabChannel(t) == msg.Channel)
+            _lastSeen[t] = seq;
     }
 
     // Reverse of TabChannel: the channel tab that shows ch (null for a channel with no tab, e.g. Unknown).

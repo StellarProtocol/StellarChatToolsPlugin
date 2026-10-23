@@ -73,10 +73,12 @@ public sealed partial class Plugin
         // LayoutUtility.GetPreferredHeight on the slot), so it renders as ~BubbleRowGap px of space between
         // consecutive rows. The bubble still HUGS — it lives in the inner RowElement (BuildBubbleRow), NOT as a
         // direct child of this Column (which force-expands child width). Applied once here so it covers BOTH the
-        // self and other branches identically.
+        // self and other branches identically. The OUTER Cond picks the compact system-notice line (.SystemNotice.cs)
+        // over any bubble — a whole-row switch, never inside a bubble's measured child.
         => new ColumnElement(new HudElement[]
         {
-            new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false)),
+            new ConditionalElement(() => IsNoticeRow(i), BuildNoticeRow(i),
+                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false))),
             new SpacerElement(Height: BubbleRowGap),
         });
 

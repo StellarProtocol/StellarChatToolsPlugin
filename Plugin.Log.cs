@@ -31,7 +31,10 @@ public sealed partial class Plugin
     // ~6-row margin over that 34 — safely above the "pool too small -> top of viewport blanks" caveat — while
     // cutting 10 live bubble GameObjects (and their per-frame layout/draw) vs the old 50. Do NOT drop below ~40
     // or the top of the viewport can blank at max height. Shrink further only if profiling shows it's safe.
-    private const int LogPoolSize = 40;
+    // System notices (.SystemNotice.cs) are one-line rows ≈ 22px, so a System tab full of them fits ≈ 44 rows in that
+    // 960px → 48. (Branches build lazily, so the extra slots cost little until shown.)
+    private const int LogPoolSize = 48;
+    private const float LogRowHeightSeed = 22f;   // VariableHeight estimate seed = the SHORTEST row (a notice line)
 
     // Edge-triggered one-shot for VirtualListElement.ResetScroll: SetActiveTab (.Tabs.cs) sets it on a tab change;
     // consumed+cleared on the next poll so the new filter re-pins to the bottom and re-measures row heights.
@@ -72,14 +75,14 @@ public sealed partial class Plugin
         for (int i = 0; i < LogPoolSize; i++) { var k = i; pool[k] = BuildBubbleSlot(k); }   // .Bubbles.cs — recycled pool slots
         // VirtualListElement materializes only ~LogPoolSize bubble GameObjects regardless of log length (the win over
         // the old eager ListElement that pre-built 200). VariableHeight: bubbles wrap to different heights, so each
-        // slot is MEASURED; RowHeight 28 seeds the estimate for un-measured rows (the SHORTEST bubble height).
+        // slot is MEASURED; LogRowHeightSeed seeds the estimate for un-measured rows (the SHORTEST row height).
         // StickToBottom: newest at the bottom, auto-follows when at the bottom, doesn't yank you when scrolled up.
         // ResetScroll re-pins to bottom + forgets the measured-height model on a tab switch. The scroll host
         // flex-grows (BuildScrollViewport sets flexibleHeight=1), so the log still fills a resized window exactly
         // like the old ScrollElement; Height 200 is the viewport baseline.
         return new VirtualListElement(
             Count:     FilteredCount,
-            RowHeight: 28f,
+            RowHeight: LogRowHeightSeed,
             Pool:      pool,
             OnWindow:  first => _windowFirst = first,
             Height:    200f)
