@@ -101,12 +101,15 @@ public sealed partial class Plugin : IStellarPlugin
         // re-asserts its rect once the window has remounted after SetVisible(true).
         _favMenuWindow = RegisterFavMenuWindow();
         _services.Framework.Update += TickFavMenuPlace;
+        // Avatar decodes (.Avatars.cs) run here under a fixed per-tick budget — never inside the window apply.
+        _services.Framework.Update += TickAvatarDecode;
     }
 
     public void Dispose()
     {
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         _sayColor.Dispose();
         _worldColor.Dispose();
         _partyColor.Dispose();
