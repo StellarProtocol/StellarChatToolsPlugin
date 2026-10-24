@@ -123,6 +123,7 @@
   "chat.whisper.menu.close": "ปิดบทสนทนา",
   "chat.whisper.menu.copyName": "คัดลอกชื่อ",
   "chat.whisper.newChat": "+ แชทใหม่",
+  "chat.whisper.noConversation": "ไม่มีบทสนทนา",
   "chat.whisper.online": "ออนไลน์",
   "chat.whisper.pick": "เลือกบทสนทนา หรือเริ่มแชทใหม่",
   "chat.whisper.pickPlaceholder": "เลือกบทสนทนาเพื่อกระซิบ…",

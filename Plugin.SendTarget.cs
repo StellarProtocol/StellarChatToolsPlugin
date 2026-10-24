@@ -164,13 +164,37 @@ public sealed partial class Plugin
     private string? _phPeerName, _phWhisperTpl;
     private string _phWhisperText = "";
 
-    // The chip itself.
-    private HudElement BuildTargetChip() => BuildPill(new HudElement[]
+    // The chip itself. In the Whisper tab it is a plain LABEL (the recipient, or "No conversation"): whisper mode lives
+    // only in that tab and the person is picked from its conversation list, so a channel menu there was only a way to
+    // leave by accident. Every other tab keeps the clickable channel chip. Either branch is exactly 28 tall, so
+    // switching tabs may change the chip's width but never the composer row's height.
+    private HudElement BuildTargetChip() => new ConditionalElement(() => _activeTab == ChatTab.Whisper,
+        BuildWhisperChipLabel(),
+        BuildPill(new HudElement[]
+            {
+                new TextElement(ChipLabel, () => TabActiveText(TargetTab()), Emphasis: true, NoWrap: true),
+                BuildChevron(),
+            },
+            () => TabPillFill(TargetTab()), ToggleTargetMenu));
+
+    // The non-interactive whisper pill: same Bubble fill + rounding as BuildPill but NO Selectable (no hover wash, no
+    // click target) and no chevron. BuildPill gets its 28 from the Selectable's 4+4 / 6+6 padding around 20-tall
+    // struts; without the Selectable the struts carry it all — 28 tall, 12 wide (= PillPadX + the Selectable's 6) — so
+    // the label sits exactly where the clickable chip's label does.
+    private HudElement BuildWhisperChipLabel() => new CellElement(new BubbleElement(new RowElement(new HudElement[]
         {
-            new TextElement(ChipLabel, () => TabActiveText(TargetTab()), Emphasis: true, NoWrap: true),
-            BuildChevron(),
-        },
-        () => TabPillFill(TargetTab()), ToggleTargetMenu);
+            new SpacerElement(Width: PillPadX + 6f, Height: ComposerControlSize),
+            new TextElement(WhisperChipLabel,
+                () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
+                Emphasis: true, NoWrap: true),
+            new SpacerElement(Width: PillPadX + 6f, Height: ComposerControlSize),
+        }, Gap: PillGap, Justify: RowJustify.Center))
+        {
+            CornerRadius = PillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent,
+            FillColorFn = () => TabPillFill(ChatTab.Whisper),
+        });
+
+    private string WhisperChipLabel() => _selectedPeer != 0 ? ChipLabel() : _loc.T("chat.whisper.noConversation");
 
     // The ▾ as an 8×5 image (see ComposerControlSize for why not a glyph). ImageElement can't be tinted, so a light and a
     // dark copy are swapped by the label's own luminance (dark only on the Light preset, where labels are darkened). Both
