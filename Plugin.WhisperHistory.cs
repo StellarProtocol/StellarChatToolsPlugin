@@ -190,6 +190,7 @@ public sealed partial class Plugin
                 if (sp.Msgs == null) sp.Info.Count = p.Count;   // until the file loads (its pending lines join on load)
             }
             else _saved[p.CharId] = new SavedPeer { Info = p };
+            if (_convs.TryGetValue(p.CharId, out var live)) NoteSavedPeerName(p.CharId, live.Name);   // a rename seen before the index loaded
             AddSavedConversation(p);   // .Whisper.cs
         }
         _histIndexLoaded = true;
@@ -245,6 +246,19 @@ public sealed partial class Plugin
         WhisperHistoryFormat.Compact(sp.Msgs);
         info.Count = sp.Msgs.Count;
         sp.Dirty = true;
+        _histStatsRev++;
+        MarkHistDirty();
+    }
+
+    // A peer's current name from any source (live whisper, friends list, the game's conversation list): a renamed player
+    // gets the new name in peers.json too — it used to change only when a new whisper of theirs was RECORDED, so with
+    // history off, or a peer who never wrote again, the saved list kept the old name. Only peers that HAVE a saved entry.
+    private void NoteSavedPeerName(long peer, string? name)
+    {
+        if (peer == 0 || string.IsNullOrEmpty(name) || !_saved.TryGetValue(peer, out var sp)) return;
+        if (string.Equals(sp.Info.Name, name, StringComparison.Ordinal)) return;
+        sp.Info.Name = name;
+        _histIndexDirty = true;
         _histStatsRev++;
         MarkHistDirty();
     }

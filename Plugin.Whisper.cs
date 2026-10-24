@@ -99,13 +99,14 @@ public sealed partial class Plugin
         try
         {
             _friendById.Clear();
-            foreach (var f in _friends.Friends) _friendById[f.CharId] = f;
+            foreach (var f in _friends.Friends) { _friendById[f.CharId] = f; NoteSavedPeerName(f.CharId, f.Name); }
             foreach (var t in _friends.PrivateChats)
             {
                 if (t.CharId == 0 || t.CharId == me || ClosedFor(t.CharId, t.LatestTimestampUtc)) continue;   // never a chat with ourselves; closed stays closed (.WhisperClosed.cs)
                 var c = GetOrCreateConv(t.CharId);
                 c.SavedOnly = false;
                 if (!string.IsNullOrEmpty(t.Name)) c.Name = t.Name;
+                NoteSavedPeerName(t.CharId, t.Name);   // .WhisperHistory.cs — a rename reaches peers.json
                 c.IsTop = t.IsTop;
                 if (t.IsOnline is { } on) c.Online = on;
                 if (t.LatestTimestampUtc > c.LatestUtc && t.LatestMsgType >= 0)
@@ -144,6 +145,7 @@ public sealed partial class Plugin
         if (!self)
         {
             if (!string.IsNullOrEmpty(m.SenderName)) c.Name = m.SenderName;
+            if (!m.IsHistory) NoteSavedPeerName(peer, m.SenderName);   // .WhisperHistory.cs — live only (a history row may carry an old name)
             if (m.Sender is { Level: > 0 } s) c.Level = s.Level;
         }
         if (m.Timestamp >= c.LatestUtc)
