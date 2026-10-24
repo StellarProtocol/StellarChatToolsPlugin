@@ -116,7 +116,7 @@ public sealed partial class Plugin
         // (WindowBuilder-Patterns.md BubbleElement), while a text change is re-measured by the bubble's own forced rebuild.
         HudElement MakeBubble(HudElement body, Func<ColorRgba?>? outline = null) => new BubbleElement(new ColumnElement(new HudElement[]
         {
-            new RowElement(new HudElement[] { BuildWhisperTag(i, self), BuildSenderName(i, self) }, Gap: WhisperTagGap),
+            new RowElement(new HudElement[] { BuildWhisperTag(i, self, suffix: false), BuildSenderName(i, self), BuildWhisperTag(i, self, suffix: true) }, Gap: WhisperTagGap),
             body,
         }, Gap: 1f))
         { MaxWidth = BubbleMaxWidth, OutlineColorFn = outline };
@@ -178,55 +178,124 @@ public sealed partial class Plugin
         }, Gap: TrSlotGap),
     }, Gap: 2f);
 
-    // The sender name. Only an INBOUND (other) whisper is repliable, so for those the name is rendered as a
-    // low-emphasis ButtonElement whose click opens a reply to that whisperer — it HUGS its label, so it never
-    // paints a full-width chip behind the bubble (the whole point of dropping the Selectable-as-bubble). Every
-    // other row keeps the name as plain per-channel-coloured text: a ButtonElement can't carry a custom label
-    // colour, and non-whispers aren't repliable, so there's no reason to button them (and the colour is kept).
+    // The sender name. Plain per-channel-coloured text on every row EXCEPT a whisper shown outside the Whisper tab, where
+    // the person's name is a LINK that opens their conversation: the inbound whisperer after "Whisper · from", or the
+    // recipient inside our own "Whisper · to Bob". The link must not look like a button (no box, tint or padding — it
+    // would resize the bubble), so it is a Bare SelectableElement (a click target with no visuals, hugging the text)
+    // around a link-styled text: whisper colour + a faint underline at rest, brighter + a solid underline on hover.
+    // Both branches are the SAME TMP bold face/size, so the Cond swapping them never changes the name's width (the
+    // BubbleElement measured-child rule, WindowBuilder-Patterns.md); hover only re-colours rich-text tags.
     private HudElement BuildSenderName(int i, bool self)
     {
-        // Our own outgoing whisper outside the Whisper tab shows "Whisper · to Bob" in the tag INSTEAD of our name.
-        HudElement plain = new TextElement(() => self && WhisperTagShown(i) ? "" : LogSenderName(i), () => LogSenderColor(i),
-            Emphasis: true, NoWrap: true);
-        if (self) return plain;   // our own echoed whisper isn't a link to a conversation
-        return new ConditionalElement(() => IsWhisperRow(i),
-            new ButtonElement(() => LogSenderName(i), () => OnRowClick(i), Style: MenuButtonStyle.Glass),
-            plain);
+        HudElement plain = new TextElement(() => LogSenderName(i), () => LogSenderColor(i), Emphasis: true, NoWrap: true);
+        HudElement link = new SelectableElement(
+            // RichEmoji = TMP rich text, for the <u>/<color> tags; the name itself is wrapped in <noparse> (NameLinkText).
+            new TextElement(() => NameLinkText(i, self), () => NameLinkColor(i), Emphasis: true, NoWrap: true) { RichEmoji = true },
+            () => OnRowClick(i))   // .Log.cs — opens PeerOf(m)'s conversation, for inbound and outbound alike
+            { Bare = true, OnHover = on => OnNameHover(i, on) };
+        return new ConditionalElement(() => NameIsLink(i, self), link, plain);
     }
 
     private bool IsWhisperRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper && m.SenderId != 0;
 
+    // Outgoing: always a link while the tag shows (the name IS the recipient). Incoming: needs a sender to open.
+    private bool NameIsLink(int slot, bool self) => WhisperTagShown(slot) && (self || IsWhisperRow(slot));
+
+    // ── Name link ───────────────────────────────────────────────────────────────────────────────────────────────────
+    // Hover = the Bare selectable's own rect (ticker hover list, FrontWindowBlocks-gated) → exactly the name.
+    private int _nameHoverSlot = -1;
+    private const float NameLinkHoverMix = 0.35f;     // hover: this far toward white (dark theme) / black (light theme)
+    private const string NameLinkRestAlpha = "59";    // rest underline ≈ 35% alpha
+    // Per-slot cache of the composed rich-text string — the Func is polled every refresh; rebuilt only on change.
+    private readonly Dictionary<int, (string Name, bool Hover, string Col, string Text)> _nameLinkCache = new();
+
+    private void OnNameHover(int slot, bool on)
+    {
+        if (on) _nameHoverSlot = slot;
+        else if (_nameHoverSlot == slot) _nameHoverSlot = -1;
+    }
+
+    private string NameLinkName(int slot, bool self)
+        => !TryMsg(slot, out var m) ? "" : self ? PeerName(PeerOf(m)) : m.SenderName;   // .Whisper.cs
+
+    // Rest: "<color=#RRGGBB59><u></color>Name</u>" — TMP takes the underline colour from the colour current when <u>
+    // opens, so the underline is faint while the glyphs keep the full ColorFn colour. Hover: a plain <u> (underline in
+    // the text colour = solid). Underline and colour tags have no width, so rest and hover lay out identically.
+    private string NameLinkText(int slot, bool self)
+    {
+        var name = NameLinkName(slot, self);
+        if (string.IsNullOrEmpty(name)) return "";
+        bool hover = _nameHoverSlot == slot;
+        var col = hover ? "" : Hex(_whisperColor.Value);   // .SystemNotice.cs — "#RRGGBB"
+        if (_nameLinkCache.TryGetValue(slot, out var e) && e.Hover == hover
+            && string.Equals(e.Name, name, StringComparison.Ordinal) && string.Equals(e.Col, col, StringComparison.Ordinal))
+            return e.Text;
+        var text = hover
+            ? "<u><noparse>" + name + "</noparse></u>"
+            : "<color=" + col + NameLinkRestAlpha + "><u></color><noparse>" + name + "</noparse></u>";
+        _nameLinkCache[slot] = (name, hover, col, text);   // keyed by slot (a fixed pool) → bounded
+        return text;
+    }
+
+    private ColorRgba? NameLinkColor(int slot)
+    {
+        var c = _whisperColor.Value;
+        if (_nameHoverSlot != slot) return c;
+        var target = Luminance(_services.Theme.Colors.MenuBackground) < 0.179f ? new ColorRgba(1f, 1f, 1f) : new ColorRgba(0f, 0f, 0f);
+        return Mix(c, target, NameLinkHoverMix);
+    }
+
     // ── Whisper tag (All / mixed tabs) ──────────────────────────────────────────────────────────────────────────────
-    // "Whisper · from" before an incoming whisperer's name, "Whisper · to Bob" in place of our own name on an outgoing
-    // one — small, bold, in the whisper colour. Hidden (empty) in the Whisper tab, where the whole pane is one person.
+    // "Whisper · from [Name]" before an incoming whisperer's name, "Whisper · to [Bob]" in place of our own name on an
+    // outgoing one — small, bold, in the whisper colour, with the NAME as its own link element between a prefix and a
+    // suffix tag (the template's text before / after {0}, so "{0}へ"-style languages keep their word order). Hidden
+    // (empty) in the Whisper tab, where the whole pane is one person.
     private const float WhisperTagGap      = 0.01f;   // ≈0: an empty tag must not shift the name (see MakeBubble)
     private const int   WhisperTagFontSize = 12;      // TMP path honours FontSize (Bold makes it TMP, like Emphasis)
+    // The gap between a prefix tag and the name. The link has no padding any more (it used to be a padded button), and
+    // the row gap must stay ≈0 for ordinary rows — so the prefix carries its own: a space plus an INVISIBLE dot, because
+    // TMP drops trailing whitespace from its preferred width (a bare trailing space would measure as nothing).
+    private const string TagPad = " <alpha=#00>.</alpha>";
 
-    private HudElement BuildWhisperTag(int i, bool self)
-        => new TextElement(() => WhisperTag(i, self), () => ChannelColor(ChatChannel.Whisper), FontSize: WhisperTagFontSize, NoWrap: true)
-            { Bold = true };
+    private HudElement BuildWhisperTag(int i, bool self, bool suffix)
+        => new TextElement(() => suffix ? WhisperTagSuffix(i, self) : WhisperTagPrefix(i, self),
+                () => ChannelColor(ChatChannel.Whisper), FontSize: WhisperTagFontSize, NoWrap: true)
+            { Bold = true, RichEmoji = true };   // RichEmoji = TMP rich text, for the <alpha> pad
 
     private bool WhisperTagShown(int slot)
         => _activeTab != ChatTab.Whisper && TryMsg(slot, out var m) && m.Channel == ChatChannel.Whisper;
 
-    // "to" tags are cached per peer, keyed on the name they were built with (+ language) — the Func is polled every refresh.
-    private readonly Dictionary<long, (string Name, string Text)> _whisperToTags = new();
-    private string? _whisperToTpl;
+    // Tag parts, rebuilt only when the localized templates change (language switch).
+    private string? _tagFromTpl, _tagToTpl;
+    private string _tagFromText = "", _tagToPrefix = "", _tagToSuffix = "";
 
-    private string WhisperTag(int slot, bool self)
+    private void EnsureTagParts()
     {
-        if (!WhisperTagShown(slot) || !TryMsg(slot, out var m)) return "";
-        // Incoming: the name after it is a padded button (BuildSenderName), which gives the tag its breathing room.
-        if (!self) return _loc.T("chat.whisper.tagFrom");
-        var tpl = _loc.T("chat.whisper.tagTo");
-        if (!string.Equals(tpl, _whisperToTpl, StringComparison.Ordinal)) { _whisperToTags.Clear(); _whisperToTpl = tpl; }
-        long peer = PeerOf(m);   // .Whisper.cs
-        var name = PeerName(peer);
-        if (_whisperToTags.TryGetValue(peer, out var e) && string.Equals(e.Name, name, StringComparison.Ordinal)) return e.Text;
-        var text = SafeFormat(tpl, name);
-        if (_whisperToTags.Count > 256) _whisperToTags.Clear();   // bounded
-        _whisperToTags[peer] = (name, text);
-        return text;
+        var from = _loc.T("chat.whisper.tagFrom");
+        var to = _loc.T("chat.whisper.tagTo");
+        if (string.Equals(from, _tagFromTpl, StringComparison.Ordinal) && string.Equals(to, _tagToTpl, StringComparison.Ordinal)) return;
+        _tagFromTpl = from; _tagToTpl = to;
+        _tagFromText = from.TrimEnd() + TagPad;
+        int k = to.IndexOf("{0}", StringComparison.Ordinal);
+        var pre = k >= 0 ? to.Substring(0, k) : to;
+        _tagToSuffix = k >= 0 ? to.Substring(k + 3) : "";
+        // Pad only where the template itself spaces the name ("to {0}"); a "{0}へ" / "· {0}" prefix ending in a space is
+        // padded the same way, one with no space before {0} is left as written.
+        _tagToPrefix = pre.Length == 0 ? "" : char.IsWhiteSpace(pre[pre.Length - 1]) ? pre.TrimEnd() + TagPad : pre;
+    }
+
+    private string WhisperTagPrefix(int slot, bool self)
+    {
+        if (!WhisperTagShown(slot)) return "";
+        EnsureTagParts();
+        return self ? _tagToPrefix : _tagFromText;
+    }
+
+    private string WhisperTagSuffix(int slot, bool self)
+    {
+        if (!self || !WhisperTagShown(slot)) return "";
+        EnsureTagParts();
+        return _tagToSuffix;
     }
 
     // A whole-message picture-emoji/sticker row (StickerId != 0). Its body renders as an image, not the junk
