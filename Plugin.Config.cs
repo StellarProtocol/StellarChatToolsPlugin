@@ -60,9 +60,28 @@ public sealed partial class Plugin
         _cfg.Save();
     }
 
-    // Called on the auto-reply text field's submit (not per keystroke — avoids a file write per key).
+    // Auto-reply text: saved on the field's submit, ~1 s after the last keystroke (debounced — not one file write per key)
+    // and when the Settings window closes, so a typed reply is never lost to a forgotten Enter.
+    private const float AutoReplySaveDelaySec = 1f;
+    private float _autoReplySaveAt = -1f;   // TimeNow the pending typed text is due to save (-1 = nothing pending)
+
+    private void OnAutoReplyTyped(string s)
+    {
+        _autoReplyText = s;
+        _autoReplySaveAt = _services.Framework.TimeNow + AutoReplySaveDelaySec;
+    }
+
+    // From TickSettings, every framework tick (before its settings-open gate).
+    private void TickAutoReplySave()
+    {
+        if (_autoReplySaveAt >= 0f && _services.Framework.TimeNow >= _autoReplySaveAt) SaveAutoReplyText();
+    }
+
+    private void FlushAutoReplyText() { if (_autoReplySaveAt >= 0f) SaveAutoReplyText(); }
+
     private void SaveAutoReplyText()
     {
+        _autoReplySaveAt = -1f;
         _cfg.Set(CfgAutoReplyText, _autoReplyText ?? "");
         _cfg.Save();
     }

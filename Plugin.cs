@@ -210,6 +210,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickMsgMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
+        try { FlushAutoReplyText(); } catch { /* swallow */ }   // .Config.cs — a typed reply not yet saved
         DisposeWhisper();
         DisposeWhisperHistory();   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
         DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped

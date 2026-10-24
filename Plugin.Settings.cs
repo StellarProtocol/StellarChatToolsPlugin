@@ -66,6 +66,7 @@ public sealed partial class Plugin
 
     private void CloseSettings()
     {
+        FlushAutoReplyText();   // .Config.cs — a typed, un-submitted reply is saved on close
         _settingsOpen = false;
         _settingsWindow?.SetVisible(false);
     }
@@ -74,6 +75,7 @@ public sealed partial class Plugin
     // it closed (not the first-open mount lag, WindowBuilder-Patterns.md "IsShown is FALSE…") — close with it.
     private void TickSettings(float _)
     {
+        TickAutoReplySave();    // .Config.cs — debounced save of a typed reply (runs while closed too)
         if (!_settingsOpen) return;
         if (!_window.IsShown) { CloseSettings(); return; }
         if (!_settingsWindow.IsShown) return;   // first open: mount lands in a later band
@@ -153,7 +155,7 @@ public sealed partial class Plugin
             new RowElement(new HudElement[]
             {
                 new TextElement(() => _loc.T("chat.reply"), Width: 56f),
-                new InputElement(() => _autoReplyText, s => { _autoReplyText = s; SaveAutoReplyText(); }, 280f, OnChange: s => _autoReplyText = s),
+                new InputElement(() => _autoReplyText, s => { _autoReplyText = s; SaveAutoReplyText(); }, 280f, OnChange: OnAutoReplyTyped),
             }, Gap: 4f),
             new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.MenuMuted),
         }, Gap: 4f)),
