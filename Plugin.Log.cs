@@ -95,6 +95,9 @@ public sealed partial class Plugin
             // re-maps a filtered index to a DIFFERENT message at constant Count (which otherwise leaves a tall sticker
             // row sized by a short text row's stale cached height → permanent overlap). See StableRowId.
             RowId          = StableRowId,
+            // Translate (.Translate.cs) swaps a row's text / adds a status line under it: the revision makes the list
+            // re-measure that one latched row in place instead of keeping its old height.
+            RowRevision    = TranslateRowRevision,
             // "↓ N new messages" bar (.NewBelow.cs): the list reports its own at-bottom pin decision, and a bump of
             // the token jumps to the newest row + re-pins (following unmeasured bottom rows until they settle).
             OnAtBottomChanged     = OnLogAtBottomChanged,
@@ -198,14 +201,23 @@ public sealed partial class Plugin
     // MsgId is server-unique globally EXCEPT whispers (per-peer, see EnsureFiltered's sort note), so fold in SenderId
     // (distinct per peer) plus Timestamp/StickerId/Text so a per-peer whisper #5 and another peer's #5 don't collide.
     // A rare collision only costs a missed verify (one stale latch survives a shift longer), never wrong behaviour.
-    private long StableRowId(int dataIndex)
+    private long StableRowId(int dataIndex) => TryDataMsg(dataIndex, out var msg) ? MessageKey(msg) : 0L;
+
+    // DATA index (filtered row, _windowFirst-independent) → message. For the list's RowId / RowRevision callbacks.
+    private bool TryDataMsg(int dataIndex, out ChatMessage msg)
     {
         EnsureFiltered();
-        if (dataIndex < 0 || dataIndex >= _filtered.Count) return 0L;
         var m = _chat.RecentMessages;
-        int ri = _filtered[dataIndex];
-        if (ri < 0 || ri >= m.Count) return 0L;
-        var msg = m[ri];
+        int ri = dataIndex >= 0 && dataIndex < _filtered.Count ? _filtered[dataIndex] : -1;
+        if (ri >= 0 && ri < m.Count) { msg = m[ri]; return true; }
+        msg = default!;
+        return false;
+    }
+
+    // The per-message identity behind StableRowId — also the session key of a message's translate state
+    // (.Translate.cs), which therefore survives ring shifts and tab switches the same way.
+    private static long MessageKey(in ChatMessage msg)
+    {
         long id = 17L;
         id = id * 31L + msg.MsgId;
         id = id * 31L + msg.SenderId;

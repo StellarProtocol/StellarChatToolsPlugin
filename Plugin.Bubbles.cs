@@ -114,32 +114,69 @@ public sealed partial class Plugin
         // ordinary row is byte-for-byte the name alone. The tag is a constant element whose TEXT changes, never a
         // ConditionalElement: a SetActive toggle inside the bubble's measured child makes it resize while scrolling
         // (WindowBuilder-Patterns.md BubbleElement), while a text change is re-measured by the bubble's own forced rebuild.
-        HudElement MakeBubble(HudElement body) => new BubbleElement(new ColumnElement(new HudElement[]
+        HudElement MakeBubble(HudElement body, Func<ColorRgba?>? outline = null) => new BubbleElement(new ColumnElement(new HudElement[]
         {
             new RowElement(new HudElement[] { BuildWhisperTag(i, self), BuildSenderName(i, self) }, Gap: WhisperTagGap),
             body,
         }, Gap: 1f))
-        { MaxWidth = BubbleMaxWidth };
+        { MaxWidth = BubbleMaxWidth, OutlineColorFn = outline };
+
+        // RichEmoji: LogText returns m.Text verbatim, keeping the inbound <sprite=N> tags the game leaves in the
+        // message; the framework hosts this body in TextMeshPro with the game's own chat sprite asset so those draw
+        // as real emoji images (literal tags until the asset resolves / off-game). Body only — the sender name
+        // carries no sprite tags, so it stays a plain Text.
+        HudElement textBubble = MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i)) { RichEmoji = true });
+        // Others' text can be translated (.Translate.cs): the translate state is ANOTHER whole-bubble branch (same rule as
+        // sticker-vs-text below — never a Cond inside the measured child), so an untranslated row is byte-for-byte the
+        // plain bubble above.
+        if (!self) textBubble = new ConditionalElement(() => TrBubbleShown(i), MakeBubble(BuildTranslatedBody(i), () => TrBubbleOutline(i)), textBubble);
 
         // Whole-bubble branches: sticker-image bubble vs wrapping-text bubble. The Cond now sits directly in the Row's
         // HLG where the single bubble used to — identical visuals, only the Cond's depth moved (out of the measured child).
-        HudElement bubble = new ConditionalElement(() => IsStickerRow(i),
-            MakeBubble(BuildStickerImage(i)),
-            // RichEmoji: LogText returns m.Text verbatim, keeping the inbound <sprite=N> tags the game leaves in the
-            // message; the framework hosts this body in TextMeshPro with the game's own chat sprite asset so those draw
-            // as real emoji images (literal tags until the asset resolves / off-game). Body only — the sender name
-            // carries no sprite tags, so it stays a plain Text.
-            MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i)) { RichEmoji = true }));
+        HudElement bubble = new ConditionalElement(() => IsStickerRow(i), MakeBubble(BuildStickerImage(i)), textBubble);
 
         var time   = new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true), Width: TimeColWidth);
         var gutter = new SpacerElement();   // flexible — soaks the row slack so the bubble hugs and the row packs
 
-        // Others: avatar · bubble · time · (flex gutter → packs left). Self mirrors it, gutter first → packs right.
+        // Others: avatar · [bubble · 文A slot] · time · (flex gutter → packs left). The inner row is the hover zone for the
+        // translate pill (RowElement.OnHover — adds no tint/padding) and spans bubble + pill, so moving onto the pill keeps
+        // it shown. The pill's cell is a CONSTANT width whether the pill is shown or not → hovering never shifts the
+        // timestamp, and the 28-tall pill is shorter than the row's 40 avatar → never changes the row height.
+        // Self mirrors it, gutter first → packs right (own messages get no translate pill).
         var children = self
             ? new HudElement[] { gutter, time, bubble, avatar }
-            : new HudElement[] { avatar, bubble, time, gutter };
+            : new HudElement[]
+            {
+                avatar,
+                new RowElement(new HudElement[] { bubble, BuildTranslateSlot(i) }, Gap: TrSlotGap) { OnHover = on => OnTrHover(i, on) },
+                time, gutter,
+            };
         return new RowElement(children, Gap: RowGap);
     }
+
+    private const float TrSlotGap = 4f;   // bubble ↔ 文A pill
+
+    // The constant-width 文A slot: a fixed cell holding the pill only while ShowTrButton (hover, or a live translate state).
+    private HudElement BuildTranslateSlot(int i) => new CellElement(new ConditionalElement(() => ShowTrButton(i),
+            BuildIconPill(new TextElement(() => TrIcon, () => TrButtonGlyph(i), FontSize: TrButtonFontSize, Align: TextAlign.Center, NoWrap: true)
+                    { Bold = true },   // Bold = the TMP path, which honours FontSize on this surface (plain Text ignores it)
+                () => TrButtonFill(i), () => OnTranslateClick(i), () => TrButtonOutline(i))),
+        Width: ComposerControlSize);
+
+    // Translate-branch body: the (translated / dimmed original) text + one small status line —
+    // "文A Translating…" / "文A Translated · Thai → English" / "文A Translation failed · click to retry". Both are constant
+    // elements whose TEXT changes (no Cond inside the bubble). The icon is its own TMP text so a CJK glyph never shares
+    // a string with Thai (one TMP face per string); the line is NoWrap like the whisper tag.
+    private HudElement BuildTranslatedBody(int i) => new ColumnElement(new HudElement[]
+    {
+        new TextElement(() => TrBodyText(i), () => TrBodyColor(i)) { RichEmoji = true },
+        new RowElement(new HudElement[]
+        {
+            new TextElement(() => TrIcon, () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { Bold = true },
+            // RichEmoji = TMP rich text: the pending dots use an <alpha> tag to keep a constant width.
+            new TextElement(() => TrStatus(i), () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { RichEmoji = true },
+        }, Gap: TrSlotGap),
+    }, Gap: 2f);
 
     // The sender name. Only an INBOUND (other) whisper is repliable, so for those the name is rendered as a
     // low-emphasis ButtonElement whose click opens a reply to that whisperer — it HUGS its label, so it never

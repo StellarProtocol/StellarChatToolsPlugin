@@ -113,8 +113,10 @@ public sealed partial class Plugin
     // changes colours only, never the tree) → Selectable (click + hover wash, the full pill) → the content row. Inside
     // the min-width composer row the bubble hugs its natural width; in a fixed-width cell it is stretched to the cell.
     // Text pills get fixed-width struts (horizontal padding); icon pills get flexible ones (Width 0 = flexible), which
-    // centre the glyph in the fixed square.
-    private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick, float width = 0f)
+    // centre the glyph in the fixed square. `outline` (optional) = a live border ring colour (null = none) — the translate
+    // pill's busy state (.Translate.cs); it is an overlay, so it never changes the pill's size.
+    private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick, float width = 0f,
+        Func<ColorRgba?>? outline = null)
     {
         bool icon = width > 0f;
         var row = new HudElement[content.Length + 2];
@@ -127,6 +129,7 @@ public sealed partial class Plugin
             {
                 // Transparent static fill (NOT null — null = the themed accent default); FillColorFn re-tints live.
                 CornerRadius = PillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent, FillColorFn = fill,
+                OutlineColorFn = outline,
             },
             Width: width);
     }
@@ -134,9 +137,9 @@ public sealed partial class Plugin
     private HudElement BuildPill(Func<string> label, Func<ColorRgba?> text, Func<ColorRgba?> fill, Action onClick)
         => BuildPill(new HudElement[] { new TextElement(label, text, Emphasis: true, NoWrap: true) }, fill, onClick);
 
-    // A square ComposerControlSize icon pill (＋ / ☺) around one centred glyph element.
-    private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick)
-        => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize);
+    // A square ComposerControlSize icon pill (＋ / ☺ / the translate 文A) around one centred glyph element.
+    private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick, Func<ColorRgba?>? outline = null)
+        => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize, outline);
 
     // [Guild ▾] in the target channel's tab colours (active-tab look); while whispering, the RECIPIENT chip [→ Name ▾] in
     // the whisper colours (TargetTab() is Whisper then). Click → the picker menu (picking a channel leaves whisper —

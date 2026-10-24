@@ -85,6 +85,11 @@ public sealed partial class Plugin
 
         new SeparatorElement(),
 
+        // Translation (.Translate.cs): target language, hover-button toggle, and the privacy note.
+        BuildTranslateSettings(),
+
+        new SeparatorElement(),
+
         // Quick-phrase editor: list of phrase + remove, then an add row (Enter or the Add button).
         new TextElement(() => _loc.T("chat.quick.title"), Emphasis: true),
         new ConditionalElement(() => _quickPhrases.Count == 0,

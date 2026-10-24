@@ -129,6 +129,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
         DisposeWhisper();
+        DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
         _sayColor.Dispose();
         _worldColor.Dispose();
         _partyColor.Dispose();
