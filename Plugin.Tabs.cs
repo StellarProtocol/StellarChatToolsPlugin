@@ -122,6 +122,10 @@ public sealed partial class Plugin
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
     }
 
+    // A tab chosen by the USER — a tab-bar click or the previous / next tab hotkeys (.TabHotkeys.cs) share this one path.
+    // Programmatic switches (the logout reset, a target-menu pick) call SetActiveTab directly.
+    private void SelectTabFromUser(ChatTab tab) => SetActiveTab(tab);
+
     // ── Tab colours ───────────────────────────────────────────────────────────────────────────────────────────────
     // A tab's base colour = its channel's theme slot (the SAME IColorSlot the message rows use, read live so a Theme
     // edit re-tints the tab with no rebuild); All has no channel, so it takes the theme accent.
@@ -228,7 +232,7 @@ public sealed partial class Plugin
                     // No Selected: arg — the bubble's pill is the SOLE active indicator. Passing Selected made the
                     // Selectable draw its OWN accent fill behind the pill too (the doubled-pill look). Hover feedback is
                     // unaffected — the Selectable's hover wash is independent of Selected.
-                    OnClick: () => SetActiveTab(tab)),
+                    OnClick: () => SelectTabFromUser(tab)),
                 Weight: 1f));
         }
         // Recessed track: the whole row in a subtly-darker rounded bubble (the sticker picker's tab-strip treatment).

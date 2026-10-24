@@ -35,6 +35,8 @@
   "chat.history.stats": "{0} · {1} · {2}",
   "chat.history.title": "Riwayat bisikan",
   "chat.hotkey.toggle": "Alihkan jendela ChatTools",
+  "chat.hotkey.prevTab": "Tab obrolan sebelumnya",
+  "chat.hotkey.nextTab": "Tab obrolan berikutnya",
   "chat.lang.af": "Afrikaans",
   "chat.lang.ar": "Arab",
   "chat.lang.bg": "Bulgaria",

@@ -101,6 +101,8 @@ public sealed partial class Plugin : IStellarPlugin
                 Description:     _loc.T("chat.hotkey.toggle"),
                 SuggestedDefault: new KeyBinding(StellarKeyCode.F12)),
             _services.Hotkeys);
+        // Previous / next read-tab hotkeys (.TabHotkeys.cs): unbound, and dormant (key passes to the game) while hidden.
+        InitTabHotkeys();
 
         // Always-on subscription: inbound messages drive BOTH per-tab unread tracking AND (when enabled)
         // whisper auto-reply. The handler early-outs when auto-reply is off, so the only cost of being
@@ -215,7 +217,8 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
         // Every remaining step in its own guard: one throwing (a half-torn-down service, a destroyed window) must not
         // skip the rest — above all the history flush and the GPU texture release.
-        Safe(FlushAutoReplyText);      // .Config.cs — a typed reply not yet saved
+        Safe(DisposeTabHotkeys);       // .TabHotkeys.cs
+        Safe(FlushAutoReplyText);     // .Config.cs — a typed reply not yet saved
         Safe(DisposeWhisper);
         Safe(DisposeWhisperHistory);   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
         Safe(DisposeTranslate);        // .Translate.Net.cs — cancel in-flight requests; late results are dropped

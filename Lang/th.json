@@ -35,6 +35,8 @@
   "chat.history.stats": "{0} · {1} · {2}",
   "chat.history.title": "ประวัติกระซิบ",
   "chat.hotkey.toggle": "สลับหน้าต่าง ChatTools",
+  "chat.hotkey.prevTab": "แท็บแชทก่อนหน้า",
+  "chat.hotkey.nextTab": "แท็บแชทถัดไป",
   "chat.lang.af": "แอฟริกานส์",
   "chat.lang.ar": "อาหรับ",
   "chat.lang.bg": "บัลแกเรีย",

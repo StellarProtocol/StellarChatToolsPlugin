@@ -35,6 +35,8 @@
   "chat.history.stats": "{0} · {1} · {2}",
   "chat.history.title": "Whisper history",
   "chat.hotkey.toggle": "Toggle ChatTools window",
+  "chat.hotkey.prevTab": "Previous chat tab",
+  "chat.hotkey.nextTab": "Next chat tab",
   "chat.lang.af": "Afrikaans",
   "chat.lang.ar": "Arabic",
   "chat.lang.bg": "Bulgarian",
