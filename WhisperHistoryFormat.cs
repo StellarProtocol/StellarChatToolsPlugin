@@ -204,6 +204,47 @@ internal static class WhisperHistoryFormat
         return list;
     }
 
+    // ── Closed conversations (closed.json) ──────────────────────────────────────────────────────────────────────────
+    // { "v":1, "closed":[ { "id":<peer charId>, "mark":<Unix ms> }, … ] } — see Plugin.WhisperClosed.cs.
+    public static byte[] WriteClosed(IReadOnlyCollection<KeyValuePair<long, long>> closed)
+    {
+        using var ms = new MemoryStream(32 + closed.Count * 48);
+        using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        {
+            w.WriteStartObject();
+            w.WriteNumber("v", 1);
+            w.WriteStartArray("closed");
+            foreach (var kv in closed)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("id", kv.Key);
+                w.WriteNumber("mark", kv.Value);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        return ms.ToArray();
+    }
+
+    public static Dictionary<long, long> ReadClosed(byte[]? bytes)
+    {
+        var map = new Dictionary<long, long>();
+        if (bytes == null || bytes.Length == 0) return map;
+        try
+        {
+            using var doc = JsonDocument.Parse(bytes);
+            if (!doc.RootElement.TryGetProperty("closed", out var arr) || arr.ValueKind != JsonValueKind.Array) return map;
+            foreach (var e in arr.EnumerateArray())
+            {
+                long id = Long(e, "id");
+                if (id != 0) map[id] = Long(e, "mark");
+            }
+        }
+        catch { /* unreadable → nothing closed (the conversations simply show again) */ }
+        return map;
+    }
+
     private static long Long(JsonElement e, string key)
         => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) ? n : 0L;
 

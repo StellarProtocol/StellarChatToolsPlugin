@@ -105,6 +105,7 @@ public sealed partial class Plugin
         _histIndexDirty = _histAnyDirty = false;
         _histStatsRev++;
         RemoveSavedOnlyConversations();  // .Whisper.cs
+        ClearClosedPeers();              // .WhisperClosed.cs — closed.json goes with the folder below
         _logDirty = true;
         HistIo(() => { foreach (var name in _services.Data.List(prefix)) _services.Data.Delete(name); });
         _histClearedUntil = _services.Framework.TimeNow + HistClearedSec;

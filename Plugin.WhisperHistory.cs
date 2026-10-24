@@ -103,6 +103,7 @@ public sealed partial class Plugin
         _histStatsRev++;
         // Conversations that only existed because of the saved index belong to the previous character.
         RemoveSavedOnlyConversations();
+        ResetClosedPeers();   // .WhisperClosed.cs — the closed set lives in the old folder too
         _logDirty = true;
     }
 
@@ -158,6 +159,9 @@ public sealed partial class Plugin
         var legacy = "whisper." + LegacyUid(_histChar);
         string charName = SelfName() ?? "";
         bool migrate = _histChar != 0 && !string.Equals(key, legacy, StringComparison.Ordinal);
+        // Closed conversations first (.WhisperClosed.cs): its result is posted BEFORE the index's, so the saved-only
+        // conversations of closed peers are never listed even for a frame.
+        LoadClosedPeers(key, gen);
         HistIo(() =>
         {
             if (migrate) MigrateLegacyFolder(legacy, key, charName);

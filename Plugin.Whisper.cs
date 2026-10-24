@@ -102,7 +102,7 @@ public sealed partial class Plugin
             foreach (var f in _friends.Friends) _friendById[f.CharId] = f;
             foreach (var t in _friends.PrivateChats)
             {
-                if (t.CharId == 0 || t.CharId == me || RecentlyClosed(t.CharId)) continue;   // never a chat with ourselves
+                if (t.CharId == 0 || t.CharId == me || ClosedFor(t.CharId, t.LatestTimestampUtc)) continue;   // never a chat with ourselves; closed stays closed (.WhisperClosed.cs)
                 var c = GetOrCreateConv(t.CharId);
                 c.SavedOnly = false;
                 if (!string.IsNullOrEmpty(t.Name)) c.Name = t.Name;
@@ -136,8 +136,8 @@ public sealed partial class Plugin
         if (m.Channel != ChatChannel.Whisper) return;
         long peer = PeerOf(m);
         if (peer == 0 || peer == SelfCharId() || !WhisperInvolvesSelf(m)) return;   // .CharacterSwitch.cs — not another character's whisper
-        if (m.IsHistory && !_convs.ContainsKey(peer) && RecentlyClosed(peer)) return;   // late history of a closed chat
-        if (!m.IsHistory) _closedAt.Remove(peer);   // a new message re-opens a closed conversation
+        if (m.IsHistory && !_convs.ContainsKey(peer) && ClosedFor(peer, m.Timestamp)) return;   // old history of a closed chat (.WhisperClosed.cs)
+        if (!m.IsHistory) ReopenClosed(peer);   // a new message re-opens a closed conversation (.WhisperClosed.cs)
         var c = GetOrCreateConv(peer);
         c.SavedOnly = false;
         bool self = IsSelf(m);
@@ -188,6 +188,7 @@ public sealed partial class Plugin
     private void SelectPeer(long peer)
     {
         if (peer == 0) return;
+        ReopenClosed(peer);   // .WhisperClosed.cs — opened on purpose (picker / name click): no longer closed
         if (_selectedPeer != peer)
         {
             _selectedPeer = peer;
@@ -220,6 +221,7 @@ public sealed partial class Plugin
     {
         if (peer == 0) return;
         try { _friends.ClosePrivateChat(peer); } catch { /* queued action */ }
+        RememberClosed(peer, Conv(peer));   // .WhisperClosed.cs — stays closed across logins until a newer message
         _convs.Remove(peer);
         _closedAt[peer] = _services.Framework.TimeNow;
         _convOrderDirty = true;
@@ -235,13 +237,14 @@ public sealed partial class Plugin
     // so it is listed from the saved name / preview / time until live or server data replaces them. Never unread.
     private void AddSavedConversation(SavedPeerInfo p)
     {
-        if (p.CharId == 0 || p.CharId == SelfCharId() || p.LastMs <= 0 || RecentlyClosed(p.CharId)) return;
+        if (p.CharId == 0 || p.CharId == SelfCharId() || p.LastMs <= 0) return;
+        var last = DateTimeOffset.FromUnixTimeMilliseconds(p.LastMs).UtcDateTime;
         bool isNew = !_convs.ContainsKey(p.CharId);
+        if (isNew && ClosedFor(p.CharId, last)) return;   // .WhisperClosed.cs — closed, and nothing newer saved since
         var c = GetOrCreateConv(p.CharId);
         if (isNew) c.SavedOnly = true;
         if (c.Name.Length == 0) c.Name = p.Name;
         if (c.Level == 0) c.Level = p.Level;
-        var last = DateTimeOffset.FromUnixTimeMilliseconds(p.LastMs).UtcDateTime;
         if (last > c.LatestUtc) { c.LatestUtc = last; c.LatestText = p.Preview; c.LatestKind = p.Kind; }
         _convOrderDirty = true;
     }
