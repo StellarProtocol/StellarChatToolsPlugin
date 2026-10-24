@@ -71,12 +71,12 @@ public sealed partial class Plugin
 
     private long NewestFor(ChatChannel ch) => _newest.TryGetValue(ch, out var v) ? v : 0L;
 
-    // Called from the inbound handler for every received message (unread + log-dirty signal).
+    // Called from the inbound handler for every received message (unread + log-append signal).
     private void NoteIncoming(ChatMessage msg)
     {
-        _logDirty = true;   // .Log.cs — force the filtered view to rebuild (even a hidden msg can front-drop the 500-ring + shift indices)
+        QueueLogAppend(msg);   // .Log.cs — append it to the view next frame (history / out-of-order → full rebuild)
         // Hidden rows (.Log.cs IsUnrenderable) and history never contribute to unread — they never occupy a log row.
-        // Mirror the IsHistory early-return: bail BEFORE touching _newest/_lastSeen, leaving _logDirty set as above.
+        // Mirror the IsHistory early-return: bail BEFORE touching _newest/_lastSeen (the log append above already ran).
         if (IsUnrenderable(msg)) return;
         // Every SHOWN text body — login history included (the history batches are the login freeze) — is handed to the
         // framework's TMP glyph prewarm NOW, so its missing glyphs rasterize a few per frame before the row is first

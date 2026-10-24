@@ -23,8 +23,8 @@ public sealed partial class Plugin
     private ChatTab _lastFilterTab = (ChatTab)(-1);   // force first EnsureFiltered to build
     private long _lastFilterPeer;                     // the Whisper tab's selected conversation the filter was built for
 
-    // The virtual list OWNS windowing now: OnWindow pushes the first visible FILTERED row here each poll, and
-    // TryMsg maps pool slot k -> filtered row _windowFirst + k. (Was a newest-MaxLogRows display window.)
+    // The virtual list OWNS windowing now: OnWindow pushes the first visible FILTERED row here each poll, and TryMsg maps
+    // pool slot k -> the filtered row that slot shows (StableSlots: row r lives in slot r % LogPoolSize — see TryMsg).
     private int _windowFirst;
 
     // Recycled bubble pool size (K): ~viewport-worth of GameObjects, reused as you scroll (NOT display positions).
@@ -91,6 +91,8 @@ public sealed partial class Plugin
         {
             VariableHeight = true,
             StickToBottom  = true,
+            // A row keeps its pool slot across window shifts (TryMsg): a new message re-binds one slot, not all of them.
+            StableSlots    = true,
             ResetScroll    = TakeTabResetPending,
             // Per-row identity so the variable list can tell when the 500-entry RecentMessages ring front-drops and
             // re-maps a filtered index to a DIFFERENT message at constant Count (which otherwise leaves a tall sticker
@@ -129,26 +131,27 @@ public sealed partial class Plugin
         return false;
     }
 
-    // Rebuild the filtered index list when a message arrived (_logDirty) or the tab changed. Cheap no-op when
-    // clean. Called from VisibleLogCount (which the list binding reads first each frame) and defensively from
-    // the slot accessors, so every accessor sees the same list within a frame.
+    // Keep the filtered list current: a full REBUILD when the view changed (_logDirty: tab / conversation / history /
+    // character / saved-history events) or the tab changed; otherwise only the live messages that arrived since are
+    // APPENDED (TryAppendPending). Cheap no-op when clean. Called from FilteredCount (which the list binding reads first
+    // each frame) and defensively from the slot accessors, so every accessor sees the same list within a frame.
     private void EnsureFiltered()
     {
-        if (!_logDirty && _activeTab == _lastFilterTab && _selectedPeer == _lastFilterPeer) return;
+        if (_activeTab == _lastFilterTab && _selectedPeer == _lastFilterPeer && !_logDirty)
+        {
+            if (_pendingAppend.Count == 0 || TryAppendPending()) return;
+        }
+        _pendingAppend.Clear();   // the ring already holds them — the rebuild below reads it
         _filtered.Clear();
         var ch = TabChannel(_activeTab);   // null = All (no filter)
         // The Whisper tab shows ONE conversation (.Whisper.cs): whispers whose other party is the selected peer — none
         // until a conversation is picked.
         long peer = _activeTab == ChatTab.Whisper ? _selectedPeer : -1;
+        _filterSelf = SelfCharId();
         var m = _chat.RecentMessages;
         // The framework ring outlives a logout: skip the previous character's messages (.CharacterSwitch.cs).
         for (int i = LogStartIndex(m); i < m.Count; i++)
-        {
-            var cm = m[i];
-            if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)
-            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer && WhisperInvolvesSelf(cm)) _filtered.Add(cm); }
-            else if ((ch == null || cm.Channel == ch.Value) && (cm.Channel != ChatChannel.Whisper || WhisperInvolvesSelf(cm))) _filtered.Add(cm);
-        }
+            if (PassesFilter(m[i], ch, peer)) _filtered.Add(m[i]);
 
         // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER
         // CHANNEL — each channel's whole time-span concatenated after the last → the ring is globally out of time
@@ -171,6 +174,58 @@ public sealed partial class Plugin
         _logDirty = false;
     }
 
+    // One message vs the active view. Hidden on EVERY tab (incl. All): un-decodable special-type leftovers.
+    private bool PassesFilter(ChatMessage cm, ChatChannel? ch, long peer)
+    {
+        if (IsUnrenderable(cm)) return false;
+        if (peer >= 0) return peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer && WhisperInvolvesSelf(cm);
+        return (ch == null || cm.Channel == ch.Value) && (cm.Channel != ChatChannel.Whisper || WhisperInvolvesSelf(cm));
+    }
+
+    // ── Incremental appends ─────────────────────────────────────────────────────────────────────────────────────────
+    // Every message used to set _logDirty, so each one — a chat line, a farming notice — re-filtered + re-sorted the
+    // whole ring AND (because the 500-ring front-drops at a constant Count once full) re-mapped every row index, which
+    // made the list re-verify every visible row. Now a live message is queued here and appended in arrival order when it
+    // is the newest in the view (the normal case); anything else — history (login / per-peer batches arrive out of time
+    // order), an older timestamp, a changed own identity, a burst — falls back to the full rebuild.
+    //
+    // The filtered list holds its OWN references, so it no longer shrinks when the framework ring drops its oldest entry:
+    // existing rows keep their data index (the list re-measures nothing, and with StableSlots no slot is rebound). It is
+    // trimmed in chunks instead — LogTrimChunk rows at once when it passes LogTrimAt: one height re-measure per chunk, not
+    // per message; a multiple of the pool size, so every remaining row keeps its pool slot too. A full rebuild (tab switch
+    // etc.) reads the ring again as before.
+    private const int LogTrimChunk = 4 * LogPoolSize;
+    private const int LogTrimAt    = 500 + LogTrimChunk;
+    private const int MaxPendingAppends = 64;   // more than this between two applies → just rebuild once
+    private readonly List<ChatMessage> _pendingAppend = new();
+    private long _filterSelf;   // SelfCharId() the filtered list was built against (whisper filtering depends on it)
+
+    // From NoteIncoming (.Tabs.cs), for every received message.
+    private void QueueLogAppend(ChatMessage msg)
+    {
+        if (_logDirty) return;   // a rebuild is due anyway (the ring has this message)
+        if (msg.IsHistory || _pendingAppend.Count >= MaxPendingAppends) { _logDirty = true; return; }
+        _pendingAppend.Add(msg);
+    }
+
+    // False = can't append in place (the caller rebuilds). Filters are evaluated here, a frame later than arrival, so the
+    // handlers that run after NoteIncoming (self identity, conversation peers) have already seen the message.
+    private bool TryAppendPending()
+    {
+        if (SelfCharId() != _filterSelf) return false;   // identity changed → whisper rows may filter differently
+        var ch = TabChannel(_activeTab);
+        long peer = _activeTab == ChatTab.Whisper ? _selectedPeer : -1;
+        foreach (var cm in _pendingAppend)
+        {
+            if (!PassesFilter(cm, ch, peer)) continue;
+            if (_filtered.Count > 0 && cm.Timestamp < _filtered[^1].Timestamp) return false;   // not the newest → re-sort
+            _filtered.Add(cm);
+        }
+        _pendingAppend.Clear();
+        if (_filtered.Count > LogTrimAt) _filtered.RemoveRange(0, LogTrimChunk);
+        return true;
+    }
+
     // Total logical rows the virtual list windows over = the active tab's filtered set (NO display cap — the Pool
     // size, not this count, bounds live GameObjects now). Rebuilds the filtered view first if dirty.
     private int FilteredCount()
@@ -180,8 +235,11 @@ public sealed partial class Plugin
     }
 
     // Pool slot -> its message. The virtual list owns windowing (_windowFirst = first visible filtered row, pushed via
-    // OnWindow); pool slot k shows filtered row _windowFirst + k.
-    private bool TryMsg(int slot, out ChatMessage msg) => TryDataMsg(_windowFirst + slot, out msg);
+    // OnWindow). StableSlots: a row keeps its pool slot while it stays in the window (slot = row % LogPoolSize), so an
+    // append or a scroll step re-binds only the one slot whose row left — not every visible bubble (re-text, avatar,
+    // width-solve). VariableListMath.StableSlotRow is the framework's inverse of that mapping.
+    private bool TryMsg(int slot, out ChatMessage msg)
+        => TryDataMsg(VariableListMath.StableSlotRow(_windowFirst, slot, LogPoolSize), out msg);
 
     // Stable per-message identity for the variable list's height-cache verification (VirtualListElement.RowId).
     // ⚠️ The framework feeds the DATA index (= filtered-row index, _windowFirst-INDEPENDENT), NOT a pool slot — so
