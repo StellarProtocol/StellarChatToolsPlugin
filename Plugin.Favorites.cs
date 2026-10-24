@@ -22,7 +22,7 @@ namespace Stellar.ChatTools;
 ///
 /// Context menu = a separate cursor-positioned popup window (Borderless + DismissOnOutsideClick, the CombatMeter row
 /// menu pattern, CombatMeter-Plugin-Patterns.md §17): the framework dismisses it on Esc / outside click per render
-/// frame; we only re-assert its rect once the (destroy-on-hide) window remounts.
+/// frame; we place it with SetRect before SetVisible(true), which the framework applies at the remount (fw dcef900).
 /// </summary>
 public sealed partial class Plugin
 {
@@ -38,8 +38,7 @@ public sealed partial class Plugin
 
     private IWindowControl _favMenuWindow = null!;
     private int  _favMenuId;                                   // sticker the open menu acts on
-    private bool _favMenuOpen, _favMenuPlaced;
-    private WindowRect _favMenuRect;
+    private bool _favMenuOpen;
 
     private byte[]? _favIconPng;                               // embedded tab icon, read once
     private bool _favIconTried;
@@ -182,24 +181,15 @@ public sealed partial class Plugin
             }, Gap: 2f), Padding: 8f),
             OnClose: CloseFavMenu));   // framework invokes this on Escape / click-outside (per-frame ticker)
 
-    // Open at the cursor. Input.mousePosition is bottom-left SCREEN px; WindowRect is top-left CANVAS units, so scale
-    // by CanvasWidth/ScreenWidth (k = 1 before the first measure). Opens down-right; flips at the canvas edges.
+    // Open at the cursor (CursorPopupRect, .WhisperList.cs: down-right, flipping at the canvas edges).
     private void OpenFavMenu(int stickerId)
     {
         if (stickerId == 0) { CloseFavMenu(); return; }
         _favMenuId = stickerId;
-        var fw = _services.Framework;
-        float k = fw.ScreenWidth > 0 && fw.CanvasWidth > 0 ? (float)fw.CanvasWidth / fw.ScreenWidth : 1f;
-        float cw = fw.CanvasWidth > 0 ? fw.CanvasWidth : Screen.width;
-        float ch = fw.CanvasHeight > 0 ? fw.CanvasHeight : Screen.height;
-        var mp = Input.mousePosition;
-        float x = mp.x * k, y = (Screen.height - mp.y) * k;
-        if (x + FavMenuW > cw) x = Mathf.Max(0f, x - FavMenuW);
-        if (y + FavMenuH > ch) y = Mathf.Max(0f, y - FavMenuH);
-        _favMenuRect = new WindowRect(x, y, FavMenuW, FavMenuH);
-        _favMenuPlaced = false;
         _favMenuOpen = true;
-        _favMenuWindow.SetRect(_favMenuRect);   // no-op while still unmounted; re-asserted in TickFavMenuPlace
+        // Set BEFORE showing: the hidden menu is unmounted, and the framework (fw dcef900) keeps a pre-mount SetRect of a
+        // DismissOnOutsideClick window and applies it at the mount, so the first painted frame is already at the cursor.
+        _favMenuWindow.SetRect(CursorPopupRect(FavMenuW, FavMenuH));
         _favMenuWindow.SetVisible(true);        // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
@@ -210,23 +200,18 @@ public sealed partial class Plugin
         if (_favorites.Contains(id)) RemoveFavorite(id); else AddFavorite(id);
     }
 
-    // The menu window is destroyed while hidden and remounts a frame (or more) later, so the SetRect in OpenFavMenu
-    // no-ops on the first open; re-assert once the mount lands (Framework.Update).
-    // Also closes the menu with its owners, like the whisper popups (.WhisperList.cs TickWhisperPopups): the chat window
-    // closing (✕, hotkey, logout) or the sticker picker it belongs to closing.
-    private void TickFavMenuPlace(float _)
+    // Framework.Update: close the menu with its owners, like the whisper popups (.WhisperList.cs TickWhisperPopups): the
+    // chat window closing (✕, hotkey, logout) or the sticker picker it belongs to closing.
+    private void TickFavMenu(float _)
     {
         if (!_favMenuOpen) return;
-        if (!_window.IsShown || !_stickerOpen) { CloseFavMenu(); return; }
-        if (_favMenuPlaced) return;
-        if (_favMenuWindow.IsShown) { _favMenuWindow.SetRect(_favMenuRect); _favMenuPlaced = true; }
+        if (!_window.IsShown || !_stickerOpen) CloseFavMenu();
     }
 
     private void CloseFavMenu()
     {
         if (!_favMenuOpen) return;
         _favMenuOpen = false;
-        _favMenuPlaced = false;
         _favMenuWindow?.SetVisible(false);
     }
 }

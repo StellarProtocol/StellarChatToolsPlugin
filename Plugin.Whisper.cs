@@ -344,6 +344,6 @@ public sealed partial class Plugin
         if (_selectedPeer != 0 && Conv(_selectedPeer) is { } c && HasUnread(c) && IsViewingConversation(_selectedPeer))
             MarkConversationRead(c);
         RunDueServerReads();   // the game's read mark, debounced (above)
-        TickWhisperPopups();   // .WhisperList.cs / .FriendPicker.cs — popup placement + close-with-window
+        TickWhisperPopups();   // .WhisperList.cs / .FriendPicker.cs — close-with-window + friend-picker settle
     }
 }

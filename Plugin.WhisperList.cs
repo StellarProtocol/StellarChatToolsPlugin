@@ -26,8 +26,8 @@ namespace Stellar.ChatTools;
 /// List rows: [avatar] [name (bold, online dot before it, unread dot slot after it) / one-line preview]. The text column is a
 /// fixed-width cell placed LAST, so a long name or preview overflows only to the right, where the list viewport's own
 /// mask clips it (the VirtualList hard-clip pattern); name and preview are also ellipsized. Right-click opens a small
-/// menu (close conversation / copy name) — the sticker-menu popup pattern (Borderless + DismissOnOutsideClick, rect
-/// re-asserted once the hidden window remounts).
+/// menu (close conversation / copy name) — the sticker-menu popup pattern (Borderless + DismissOnOutsideClick, SetRect
+/// at the cursor before SetVisible, applied by the framework at the remount).
 /// </summary>
 public sealed partial class Plugin
 {
@@ -56,8 +56,7 @@ public sealed partial class Plugin
 
     private IWindowControl _convMenuWindow = null!;
     private long _convMenuPeer;
-    private bool _convMenuOpen, _convMenuPlaced;
-    private WindowRect _convMenuRect;
+    private bool _convMenuOpen;
 
     // Placeholder / header caches (polled every refresh → rebuilt only when the inputs change).
     private long _hdrLevelPeer = -1; private int _hdrLevel; private string? _hdrLevelTpl; private string _hdrLevelText = "";
@@ -278,10 +277,9 @@ public sealed partial class Plugin
     {
         if (peer == 0) { CloseConvMenu(); return; }
         _convMenuPeer = peer;
-        _convMenuRect = CursorPopupRect(ConvMenuW, ConvMenuH);
-        _convMenuPlaced = false;
         _convMenuOpen = true;
-        _convMenuWindow.SetRect(_convMenuRect);   // no-op while still unmounted; re-asserted in TickWhisperPopups
+        // Set BEFORE showing: the framework applies a pre-mount SetRect of a click-away popup at its mount (fw dcef900).
+        _convMenuWindow.SetRect(CursorPopupRect(ConvMenuW, ConvMenuH));
         _convMenuWindow.SetVisible(true);         // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
@@ -289,7 +287,6 @@ public sealed partial class Plugin
     {
         if (!_convMenuOpen) return;
         _convMenuOpen = false;
-        _convMenuPlaced = false;
         _convMenuWindow?.SetVisible(false);
     }
 
@@ -316,13 +313,12 @@ public sealed partial class Plugin
         return new WindowRect(x, y, w, h);
     }
 
-    // Framework.Update (via TickWhisper): re-assert each popup's rect once its remount lands, and close them when the chat
-    // window goes away (they are separate windows and would otherwise stay up).
+    // Framework.Update (via TickWhisper): close the popups when the chat window goes away (they are separate windows and
+    // would otherwise stay up), and settle the anchored friend picker's content-fitted size.
     private void TickWhisperPopups()
     {
         if (!_convMenuOpen && !_friendPickerOpen) return;
         if (!_window.IsShown) { CloseConvMenu(); CloseFriendPicker(); return; }
-        if (_convMenuOpen && !_convMenuPlaced && _convMenuWindow.IsShown) { _convMenuWindow.SetRect(_convMenuRect); _convMenuPlaced = true; }
         if (_friendPickerOpen) SettleAnchoredPopup(_friendPickerWindow, _friendPickerAnchor);   // .PopupAnchor.cs
     }
 }

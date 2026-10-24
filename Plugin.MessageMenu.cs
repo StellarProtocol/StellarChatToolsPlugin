@@ -34,8 +34,7 @@ public sealed partial class Plugin
 
     private IWindowControl _msgMenuWindow = null!;
     private MsgMenuItem[] _msgMenuItems = Array.Empty<MsgMenuItem>();
-    private bool _msgMenuOpen, _msgMenuPlaced;
-    private WindowRect _msgMenuRect;
+    private bool _msgMenuOpen;
     private string _msgMenuText = "";          // the captured message's copyable text ("" = nothing to copy)
     private bool _msgMenuSticker;              // captured message is a sticker (no text to copy)
     private double _msgCopiedUntil = double.NegativeInfinity;   // TimeNow until which "Copied" shows
@@ -100,10 +99,10 @@ public sealed partial class Plugin
         var raw = m.Channel == ChatChannel.System && !string.IsNullOrEmpty(m.SystemLabel) ? m.SystemLabel + " " + m.Text : m.Text;
         _msgMenuText = _msgMenuSticker ? "" : StripRichTags(m.SystemLabel != null ? raw ?? "" : ChatMarkup.SanitizeWire(raw));
         _msgCopiedUntil = double.NegativeInfinity;
-        _msgMenuRect = CursorPopupRect(MsgMenuW, MsgMenuHeight());   // .WhisperList.cs
-        _msgMenuPlaced = false;
         _msgMenuOpen = true;
-        _msgMenuWindow.SetRect(_msgMenuRect);   // no-op while still unmounted; re-asserted in TickMsgMenu
+        // Set BEFORE showing: the framework applies a pre-mount SetRect of a click-away popup at its mount (fw dcef900).
+        // The height comes from the item list, so it is known up front: nothing to re-place once mounted.
+        _msgMenuWindow.SetRect(CursorPopupRect(MsgMenuW, MsgMenuHeight()));   // .WhisperList.cs
         _msgMenuWindow.SetVisible(true);        // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
@@ -116,12 +115,11 @@ public sealed partial class Plugin
         _msgCopiedUntil = _services.Framework.TimeNow + MsgCopiedFlash;
     }
 
-    // Framework.Update: re-assert the rect once the remount lands, end the "Copied" flash, and close with the chat window.
+    // Framework.Update: end the "Copied" flash, and close with the chat window.
     private void TickMsgMenu(float _)
     {
         if (!_msgMenuOpen) return;
         if (!_window.IsShown) { CloseMsgMenu(); return; }
-        if (!_msgMenuPlaced && _msgMenuWindow.IsShown) { _msgMenuWindow.SetRect(_msgMenuRect); _msgMenuPlaced = true; }
         if (_msgCopiedUntil != double.NegativeInfinity && _services.Framework.TimeNow >= _msgCopiedUntil) CloseMsgMenu();
     }
 
@@ -129,7 +127,6 @@ public sealed partial class Plugin
     {
         if (!_msgMenuOpen) return;
         _msgMenuOpen = false;
-        _msgMenuPlaced = false;
         _msgCopiedUntil = double.NegativeInfinity;
         _msgMenuWindow?.SetVisible(false);
     }

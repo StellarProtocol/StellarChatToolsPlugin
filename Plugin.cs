@@ -118,9 +118,9 @@ public sealed partial class Plugin : IStellarPlugin
         _chat.SendResult += OnSendResult;
 
         // Sticker right-click menu (.Favorites.cs): a cursor-positioned click-away popup; the Update hook only
-        // re-asserts its rect once the window has remounted after SetVisible(true).
+        // closes it with the chat window / sticker picker (placement is a SetRect before SetVisible, fw dcef900).
         _favMenuWindow = RegisterFavMenuWindow();
-        _services.Framework.Update += TickFavMenuPlace;
+        _services.Framework.Update += TickFavMenu;
         // Send-target picker (.SendTarget.cs): a popup anchored to the chip (.PopupAnchor.cs).
         _targetMenuWindow = RegisterTargetMenuWindow();
         _services.Framework.Update += TickTargetMenu;
@@ -207,7 +207,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.ClientState.Logout -= OnClientLogout; } catch { /* swallow */ }
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _chat.SendResult -= OnSendResult; } catch { /* swallow */ }
-        try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickFavMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
