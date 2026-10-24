@@ -84,22 +84,47 @@ public sealed partial class Plugin
     }, Gap: WhisperPaneGap);
 
     // ── Header ──────────────────────────────────────────────────────────────────────────────────────────────────────
-    // [Name] [Lv.N] [● online] — or a muted "pick a conversation" prompt — over the pane's width-floor marker (see the
-    // class note). The text row is NOT marked (a long name must not widen the window) and its texts report min 0, so it
-    // never forces the pane wider. Gap 0.01 = a real zero (0 = the default 12), so the marker adds no height.
+    // A recessed bar (the tab strip's track fill + rounding) over the pane's width-floor marker (see the class note):
+    //   [3-unit whisper-colour strip] [avatar 32] [name (bold 15, whisper colour) / "● Online · Lv.60"] … ["Whisper" pill]
+    // With no conversation picked: the strip + the muted "pick a conversation" prompt only. The strip's 40-tall strut
+    // sets the bar height in BOTH states (taller than the avatar and the two text lines), so picking / switching a
+    // conversation never moves the log below. Nothing in the bar carries a big fixed min width (texts report min 0 and
+    // are ellipsized; fixed parts ≈ 140 « the pane floor), and the bar row is NOT marked — the separate marker row still
+    // carries the floor. Gap 0.01 = a real zero (0 = the default 12), so the marker adds no height.
+    private const float HeaderStripW   = 3f;
+    private const float HeaderContentH = 40f;   // bar height minus its 6 + 6 padding
+    private const float HeaderPadY     = 6f;
+    private const int   HeaderSubFontSize = 12, HeaderPillFontSize = 10;
+
     private HudElement BuildWhisperHeader() => new ColumnElement(new HudElement[]
     {
-        new RowElement(new HudElement[]
+        new BubbleElement(new RowElement(new HudElement[]
         {
-            new TextElement(HeaderTitle, () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
-                Emphasis: true, NoWrap: true),
-            new TextElement(HeaderLevel, MutedCol, NoWrap: true),
-            new ConditionalElement(() => PeerOnline(_selectedPeer) == true, new RowElement(new HudElement[]
+            // The left accent strip: a whisper-coloured block, full content height. A bubble because the toolkit has no
+            // per-side border; its strut doubles as the bar's constant-height strut.
+            new BubbleElement(new SpacerElement(Width: HeaderStripW, Height: HeaderContentH))
+                { FillColor = Transparent, FillColorFn = () => ChannelColor(ChatChannel.Whisper), CornerRadius = 2f, PaddingX = 0f, PaddingY = 0f },
+            new ConditionalElement(() => _selectedPeer != 0,
+                new GameTextureElement(() => AvatarTextureFor(_selectedPeer), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 }),
+            new CellElement(new ColumnElement(new HudElement[]
             {
-                new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize),
-                new TextElement(() => _loc.T("chat.whisper.online"), MutedCol, NoWrap: true),
-            }, Gap: 4f)),
-        }, Gap: 8f),
+                new TextElement(HeaderTitle, () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
+                    Emphasis: true, NoWrap: true) { Ellipsize = true },
+                new ConditionalElement(() => _selectedPeer != 0 && HeaderSub().Length > 0, new RowElement(new HudElement[]
+                {
+                    new ConditionalElement(() => PeerOnline(_selectedPeer) == true,
+                        new RowElement(new HudElement[] { new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize) })),
+                    // RichEmoji = the TMP path, which honours FontSize on this surface (a plain Text ignores it).
+                    new TextElement(HeaderSub, MutedCol, FontSize: HeaderSubFontSize, NoWrap: true) { RichEmoji = true, Ellipsize = true },
+                }, Gap: 4f)),
+            }, Gap: 1f), Weight: 1f),
+            new ConditionalElement(() => _selectedPeer != 0, new BubbleElement(
+                new TextElement(() => _loc.T(TabLabelKey(ChatTab.Whisper)), () => TabActiveText(ChatTab.Whisper),
+                    FontSize: HeaderPillFontSize, NoWrap: true) { Bold = true })
+                { FillColor = Transparent, FillColorFn = () => TabPillFill(ChatTab.Whisper), CornerRadius = PillRadius, PaddingX = 6f, PaddingY = 2f }),
+            new SpacerElement(Width: 1f, Height: 1f),   // + the row gap = the bar's right padding (its left is the strip edge)
+        }, Gap: 8f))
+        { FillColor = TabTrackFill, CornerRadius = 10f, PaddingX = 0f, PaddingY = HeaderPadY },
         // Zero-height marker: Weight cell (min 0, preferred = the spacer's width) → laid out at the pane's real width.
         // No bubble under it, so the NoCap rule doesn't bite.
         new RowElement(new HudElement[]
@@ -110,18 +135,24 @@ public sealed partial class Plugin
 
     private string HeaderTitle() => _selectedPeer != 0 ? PeerName(_selectedPeer) : _loc.T("chat.whisper.pick");
 
-    private string HeaderLevel()
+    // "Online · Lv.60" — each part only when known (online state from the conversation or the friends list; level > 0).
+    private string HeaderSub()
     {
-        int lv = _selectedPeer != 0 ? PeerLevel(_selectedPeer) : 0;
-        if (lv <= 0) return "";
+        if (_selectedPeer == 0) return "";
+        bool? online = PeerOnline(_selectedPeer);
+        int lv = PeerLevel(_selectedPeer);
+        var status = online is { } on ? _loc.T(on ? "chat.friends.online" : "chat.friends.offline") : "";
         var tpl = _loc.T("chat.whisper.level");
-        if (lv != _hdrLevel || _hdrLevelPeer != _selectedPeer || !string.Equals(tpl, _hdrLevelTpl, StringComparison.Ordinal))
+        if (lv != _hdrLevel || _hdrLevelPeer != _selectedPeer || !string.Equals(tpl, _hdrLevelTpl, StringComparison.Ordinal)
+            || !string.Equals(status, _hdrStatus, StringComparison.Ordinal))
         {
-            _hdrLevel = lv; _hdrLevelPeer = _selectedPeer; _hdrLevelTpl = tpl;
-            _hdrLevelText = SafeFormat(tpl, lv);
+            _hdrLevel = lv; _hdrLevelPeer = _selectedPeer; _hdrLevelTpl = tpl; _hdrStatus = status;
+            var level = lv > 0 ? SafeFormat(tpl, lv) : "";
+            _hdrLevelText = status.Length > 0 && level.Length > 0 ? status + " · " + level : status + level;
         }
         return _hdrLevelText;
     }
+    private string? _hdrStatus;
 
     // ── Conversation list ───────────────────────────────────────────────────────────────────────────────────────────
     private HudElement BuildConversationPane()
