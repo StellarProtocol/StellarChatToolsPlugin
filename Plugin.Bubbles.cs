@@ -397,6 +397,18 @@ public sealed partial class Plugin
         _pendingSelfAt = DateTime.UtcNow;
     }
 
+    private static readonly TimeSpan PendingSelfEchoWindow = TimeSpan.FromSeconds(6);
+
+    // Is this fresh message the echo of what we last sent? A text send matches by Text, a sticker send by StickerId (our
+    // echo carries back the configId we sent). Read-only: the auto-reply guard asks BEFORE LearnSelfFromEcho consumes it.
+    private bool IsPendingSelfEcho(ChatMessage msg)
+    {
+        if (msg.IsHistory || (_pendingSelfText == null && _pendingSelfStickerId == 0)) return false;
+        if (DateTime.UtcNow - _pendingSelfAt > PendingSelfEchoWindow || msg.Channel != _pendingSelfChannel) return false;
+        return (_pendingSelfText != null && string.Equals(msg.Text, _pendingSelfText, StringComparison.Ordinal))
+            || (_pendingSelfStickerId != 0 && msg.StickerId == _pendingSelfStickerId);
+    }
+
     // Called from the inbound handler (Plugin.AutoReply.cs). When a fresh message matches what we just sent,
     // adopt its sender identity as ours. Only needed until learned once.
     private void LearnSelfFromEcho(ChatMessage msg)
@@ -404,13 +416,8 @@ public sealed partial class Plugin
         if (_selfCharId != 0 && !string.IsNullOrEmpty(_selfName)) return;
         if (msg.IsHistory) return;
         if (_pendingSelfText == null && _pendingSelfStickerId == 0) return;   // nothing pending to match against
-        if (DateTime.UtcNow - _pendingSelfAt > TimeSpan.FromSeconds(6)) { _pendingSelfText = null; _pendingSelfStickerId = 0; return; }
-        if (msg.Channel != _pendingSelfChannel) return;
-
-        // Match a text send by its Text, or a sticker send by its StickerId (our echo carries back the configId we sent).
-        bool matches = (_pendingSelfText != null && string.Equals(msg.Text, _pendingSelfText, StringComparison.Ordinal))
-                    || (_pendingSelfStickerId != 0 && msg.StickerId == _pendingSelfStickerId);
-        if (!matches) return;
+        if (DateTime.UtcNow - _pendingSelfAt > PendingSelfEchoWindow) { _pendingSelfText = null; _pendingSelfStickerId = 0; return; }
+        if (!IsPendingSelfEcho(msg)) return;
 
         if (!string.IsNullOrEmpty(msg.SenderName)) _selfName = msg.SenderName;
         if (msg.SenderId != 0) _selfCharId = msg.SenderId;
