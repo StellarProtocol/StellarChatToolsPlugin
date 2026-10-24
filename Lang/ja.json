@@ -77,6 +77,8 @@
   "chat.lang.vi": "ベトナム語",
   "chat.lang.zh-CN": "中国語（簡体字）",
   "chat.lang.zh-TW": "中国語（繁体字）",
+  "chat.menu.copied": "コピーしました",
+  "chat.menu.copyMessage": "メッセージをコピー",
   "chat.newBelow.many": "↓ 新着メッセージ {0}件",
   "chat.newBelow.one": "↓ 新着メッセージ {0}件",
   "chat.prefix.guild": "[ギルド]",

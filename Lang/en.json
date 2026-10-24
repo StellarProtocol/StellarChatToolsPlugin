@@ -77,6 +77,8 @@
   "chat.lang.vi": "Vietnamese",
   "chat.lang.zh-CN": "Chinese (Simplified)",
   "chat.lang.zh-TW": "Chinese (Traditional)",
+  "chat.menu.copied": "Copied",
+  "chat.menu.copyMessage": "Copy message",
   "chat.newBelow.many": "↓ {0} new messages",
   "chat.newBelow.one": "↓ {0} new message",
   "chat.prefix.guild": "[Guild]",

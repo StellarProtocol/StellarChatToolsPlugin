@@ -77,6 +77,8 @@
   "chat.lang.vi": "Vietnam",
   "chat.lang.zh-CN": "Tionghoa (Sederhana)",
   "chat.lang.zh-TW": "Tionghoa (Tradisional)",
+  "chat.menu.copied": "Disalin",
+  "chat.menu.copyMessage": "Salin pesan",
   "chat.newBelow.many": "↓ {0} pesan baru",
   "chat.newBelow.one": "↓ {0} pesan baru",
   "chat.prefix.guild": "[Guild]",

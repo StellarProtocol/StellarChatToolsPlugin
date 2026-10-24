@@ -77,6 +77,8 @@
   "chat.lang.vi": "베트남어",
   "chat.lang.zh-CN": "중국어(간체)",
   "chat.lang.zh-TW": "중국어(번체)",
+  "chat.menu.copied": "복사됨",
+  "chat.menu.copyMessage": "메시지 복사",
   "chat.newBelow.many": "↓ 새 메시지 {0}개",
   "chat.newBelow.one": "↓ 새 메시지 {0}개",
   "chat.prefix.guild": "[길드]",

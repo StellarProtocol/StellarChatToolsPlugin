@@ -77,6 +77,8 @@
   "chat.lang.vi": "Vietnamese",
   "chat.lang.zh-CN": "Tsino (Pinasimple)",
   "chat.lang.zh-TW": "Tsino (Tradisyonal)",
+  "chat.menu.copied": "Nakopya na",
+  "chat.menu.copyMessage": "Kopyahin ang mensahe",
   "chat.newBelow.many": "↓ {0} bagong mensahe",
   "chat.newBelow.one": "↓ {0} bagong mensahe",
   "chat.prefix.guild": "[Guild]",

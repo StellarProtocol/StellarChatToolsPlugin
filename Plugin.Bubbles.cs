@@ -81,7 +81,7 @@ public sealed partial class Plugin
         // over any bubble — a whole-row switch, never inside a bubble's measured child.
         => new ColumnElement(new HudElement[]
         {
-            new ConditionalElement(() => IsNoticeRow(i), BuildNoticeRow(i),
+            new ConditionalElement(() => IsNoticeRow(i), MessageRightClickTarget(BuildNoticeRow(i), i),   // right-click = message menu (.MessageMenu.cs)
                 new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false))),
             new SpacerElement(Height: BubbleRowGap),
         });
@@ -138,6 +138,9 @@ public sealed partial class Plugin
         // Whole-bubble branches: sticker-image bubble vs wrapping-text bubble. The Cond now sits directly in the Row's
         // HLG where the single bubble used to — identical visuals, only the Cond's depth moved (out of the measured child).
         HudElement bubble = new ConditionalElement(() => IsStickerRow(i), MakeBubble(BuildStickerImage(i)), textBubble);
+        // Right-click = the message menu (.MessageMenu.cs). A Bare target AROUND the whole-bubble Cond (outside the measured
+        // child): no visuals/padding, and nested buttons (name links, translate) still take their own left clicks.
+        bubble = MessageRightClickTarget(bubble, i);
 
         var time   = new CellElement(new TextElement(() => LogTime(i), MutedCol, NoWrap: true), Width: TimeColWidth);
         var gutter = new SpacerElement();   // flexible — soaks the row slack so the bubble hugs and the row packs

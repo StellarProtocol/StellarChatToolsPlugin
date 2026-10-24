@@ -77,6 +77,8 @@
   "chat.lang.vi": "เวียดนาม",
   "chat.lang.zh-CN": "จีน (ตัวย่อ)",
   "chat.lang.zh-TW": "จีน (ตัวเต็ม)",
+  "chat.menu.copied": "คัดลอกแล้ว",
+  "chat.menu.copyMessage": "คัดลอกข้อความ",
   "chat.newBelow.many": "↓ ข้อความใหม่ {0} ข้อความ",
   "chat.newBelow.one": "↓ ข้อความใหม่ {0} ข้อความ",
   "chat.prefix.guild": "[กิลด์]",
