@@ -94,14 +94,15 @@ public sealed partial class Plugin
     // IFriends.Changed (main thread): refresh the friend map, then merge the game's conversation list.
     private void OnFriendsChanged()
     {
-        _friendsRemergePending = false;   // .CharacterSwitch.cs — a fresh poll (or the timer) has merged the new lists
+        _friendsRemergePending = false;   // .CharacterSwitch.cs — a fresh poll (or a same-character re-login) merged
+        long me = SelfCharId();
         try
         {
             _friendById.Clear();
             foreach (var f in _friends.Friends) _friendById[f.CharId] = f;
             foreach (var t in _friends.PrivateChats)
             {
-                if (t.CharId == 0 || RecentlyClosed(t.CharId)) continue;
+                if (t.CharId == 0 || t.CharId == me || RecentlyClosed(t.CharId)) continue;   // never a chat with ourselves
                 var c = GetOrCreateConv(t.CharId);
                 c.SavedOnly = false;
                 if (!string.IsNullOrEmpty(t.Name)) c.Name = t.Name;
@@ -134,7 +135,7 @@ public sealed partial class Plugin
     {
         if (m.Channel != ChatChannel.Whisper) return;
         long peer = PeerOf(m);
-        if (peer == 0 || peer == SelfCharId()) return;
+        if (peer == 0 || peer == SelfCharId() || !WhisperInvolvesSelf(m)) return;   // .CharacterSwitch.cs — not another character's whisper
         if (m.IsHistory && !_convs.ContainsKey(peer) && RecentlyClosed(peer)) return;   // late history of a closed chat
         if (!m.IsHistory) _closedAt.Remove(peer);   // a new message re-opens a closed conversation
         var c = GetOrCreateConv(peer);
@@ -265,7 +266,7 @@ public sealed partial class Plugin
         var m = _chat.RecentMessages;
         int n = 0;
         for (int i = LogStartIndex(m); i < m.Count; i++)   // .CharacterSwitch.cs — not the previous character's
-            if (m[i].Channel == ChatChannel.Whisper && PeerOf(m[i]) == peer) n++;
+            if (m[i].Channel == ChatChannel.Whisper && PeerOf(m[i]) == peer && WhisperInvolvesSelf(m[i])) n++;
         return n;
     }
 
@@ -307,7 +308,6 @@ public sealed partial class Plugin
     {
         if (_selectedPeer != 0 && Conv(_selectedPeer) is { } c && HasUnread(c) && IsViewingConversation(_selectedPeer))
             MarkConversationRead(c);
-        TickFriendsRemerge();  // .CharacterSwitch.cs — refill the list for the new character after a reset
         TickWhisperPopups();   // .WhisperList.cs / .FriendPicker.cs — popup placement + close-with-window
     }
 }

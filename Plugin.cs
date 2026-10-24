@@ -106,6 +106,8 @@ public sealed partial class Plugin : IStellarPlugin
         // Re-hide on each world entry (see StartVisible above). Phase stays World through in-world zone loads, so this
         // fires once per character login, never on a teleport/dungeon load mid-session.
         _services.ClientState.PhaseChanged += OnPhaseChanged;
+        // Per-character reset (.CharacterSwitch.cs): raised from the game's OnLogout before the player record is cleared.
+        _services.ClientState.Logout += OnClientLogout;
         // The server's verdict on each send (.SendCooldown.cs): ends the optimistic Send hold, flashes a refusal, and
         // restores a refused draft. The cooldown length itself is polled from IChat.TryGetSendCooldown.
         _chat.SendResult += OnSendResult;
@@ -182,13 +184,14 @@ public sealed partial class Plugin : IStellarPlugin
         _window.SetVisible(false);
     }
 
-    // Leaving World (logout / character switch) → flush + drop everything per-character (.CharacterSwitch.cs). This is
-    // the edge to flush on: the framework raises it before clearing the player record, so _histKey and SelfName() still
-    // describe the outgoing character. World entry → start hidden. No FlushHistory there: the leave edge already
-    // flushed, and at the entry edge SelfName() may already return the new character (would mislabel an index).
+    // World entry → start hidden. Leaving World also resets per-character state (.CharacterSwitch.cs) — but only as a
+    // second trigger: a logout from World usually raises NO PhaseChanged (Phase stays World until the login view shows,
+    // which an Account-Switcher auto-login skips), so the primary edge is IClientState.Logout (OnClientLogout). No
+    // FlushHistory at world entry: the logout edge already flushed, and SelfName() may already be the new character.
     private void OnPhaseChanged(PhaseChange change)
     {
-        if (change.From == GamePhase.World && change.To != GamePhase.World) ResetCharacterState(cutLog: true);
+        _services.Log.Info($"[ChatTools] phase {change.From} → {change.To}");
+        if (change.From == GamePhase.World && change.To != GamePhase.World) ResetCharacterState(fallback: false);
         if (change.To == GamePhase.World && change.From != GamePhase.World) HideChat();
     }
 
@@ -196,6 +199,7 @@ public sealed partial class Plugin : IStellarPlugin
     {
         try { _launcher.Dispose(); } catch { /* swallow */ }
         try { _services.ClientState.PhaseChanged -= OnPhaseChanged; } catch { /* swallow */ }
+        try { _services.ClientState.Logout -= OnClientLogout; } catch { /* swallow */ }
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _chat.SendResult -= OnSendResult; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }

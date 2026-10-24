@@ -146,8 +146,8 @@ public sealed partial class Plugin
         {
             var cm = m[i];
             if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)
-            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer) _filtered.Add(cm); }
-            else if (ch == null || cm.Channel == ch.Value) _filtered.Add(cm);
+            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer && WhisperInvolvesSelf(cm)) _filtered.Add(cm); }
+            else if ((ch == null || cm.Channel == ch.Value) && (cm.Channel != ChatChannel.Whisper || WhisperInvolvesSelf(cm))) _filtered.Add(cm);
         }
 
         // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER

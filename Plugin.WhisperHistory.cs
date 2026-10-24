@@ -68,12 +68,17 @@ public sealed partial class Plugin
 
     // ── Character / folder key ──────────────────────────────────────────────────────────────────────────────────────
     // Framework.Update. A character change (logout = 0, or a switch) flushes the old character, then starts over.
+    // Character + folder-key work runs ONLY in a stable logged-in world: after a logout from World the Phase can stay
+    // World (no login view seen — Account Switcher) while the charId still reads the previous character and charBase is
+    // already gone — that is what logged "UID read: nil:nil" at the title screen, and the 30 s fallback could then have
+    // keyed a folder off it. Zone loads pause it too (harmless: the batch flush just waits).
     private void TickWhisperHistory(float _)
     {
-        long me = 0;
-        try { me = _services.PlayerState.CharId; } catch { /* identity not ready */ }
         float now = _services.Framework.TimeNow;
         TickHistoryConfirm(now);   // .WhisperHistory.Settings.cs — the clear button's 5 s confirm timeout
+        if (!InStableWorld()) { _uidSince = now; return; }
+        long me = 0;
+        try { me = _services.PlayerState.CharId; } catch { /* identity not ready */ }
         TickCharacterSwitch(me);   // .CharacterSwitch.cs — fallback reset when the charId changed with no logout edge
         if (me != _histChar)
         {
@@ -106,7 +111,7 @@ public sealed partial class Plugin
         // CharId is known from the character select on, but charBase only describes us once in the world — so the
         // fallback clock only runs in the world (idling at the character select must not trip the charId fallback).
         bool canRead = false;
-        try { canRead = _services.Lua.Ready && _services.ClientState.Phase == GamePhase.World; } catch { /* not ready */ }
+        try { canRead = _services.Lua.Ready && InStableWorld(); } catch { /* not ready */ }
         if (!canRead) { _uidSince = now; return; }
         if (now < _uidNextTry) return;
         _uidNextTry = now + UidRetrySec;
@@ -193,8 +198,18 @@ public sealed partial class Plugin
     private void NoteWhisperHistory(ChatMessage m)
     {
         if (!_keepWhisperHistory || m.Channel != ChatChannel.Whisper || IsUnrenderable(m)) return;
-        if (_histKey == null) { if (_histPreKey.Count < PreKeyCap) _histPreKey.Add(m); return; }
+        // Park it while the key is unknown — or while the key belongs to ANOTHER character than the one now logged in (a
+        // switch the logout edge missed: the new character's replay must never be written into the old one's folder).
+        long cur = 0;
+        try { cur = _services.PlayerState.CharId; } catch { /* identity not ready */ }
+        if (_histKey == null || (cur != 0 && cur != _histChar)) { if (_histPreKey.Count < PreKeyCap) _histPreKey.Add(m); return; }
         RecordSaved(m);
+    }
+
+    private bool InStableWorld()
+    {
+        var cs = _services.ClientState;
+        return cs.IsLoggedIn && cs.IsWorldActive && cs.Phase == GamePhase.World;
     }
 
     private void RecordSaved(ChatMessage m)
