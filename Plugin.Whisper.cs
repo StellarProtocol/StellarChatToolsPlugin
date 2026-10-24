@@ -186,7 +186,9 @@ public sealed partial class Plugin
             _logDirty = true;
             ResetNewBelow();
         }
-        _sendTargetIndex = 4;          // the composer whispers this person (.Composer.cs)
+        // The composer whispers this person (.Composer.cs) — but only inside the Whisper tab, where whisper mode lives
+        // (every caller opens it first; the guard keeps a stray select from re-arming whisper on another tab).
+        if (_activeTab == ChatTab.Whisper) _sendTargetIndex = 4;
         var c = GetOrCreateConv(peer);
         MarkConversationRead(c);
         if (!c.HistoryRequested)

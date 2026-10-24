@@ -30,9 +30,12 @@ public sealed partial class Plugin
     private string _quickEditText = string.Empty;
     private List<string> _quickPhrases = new();   // user-configurable; populated by LoadConfig
 
-    // Default the composer target to the opened read-tab's channel (overridable afterwards). All/System don't
-    // map to a send target, so they leave the current selection untouched. In-memory only (not persisted —
-    // only an explicit target-button click persists the default).
+    // Default the composer target to the opened read-tab's channel (overridable afterwards). In-memory only (not
+    // persisted — only an explicit target-button click persists the default). Whisper mode lives ONLY in the Whisper
+    // tab: a whisper that kept going after switching to All was an accidental-whisper trap, so leaving Whisper always
+    // lands on a channel. All/System have no channel of their own, so leaving Whisper for them falls back to the SAVED
+    // default (never overwritten here); any other selection is left untouched there. _selectedPeer is kept, so coming
+    // back to Whisper re-targets the same conversation.
     private void OnTabOpened(ChatTab tab)
     {
         switch (tab)
@@ -42,6 +45,7 @@ public sealed partial class Plugin
             case ChatTab.Party:   _sendTargetIndex = 2; break;
             case ChatTab.Guild:   _sendTargetIndex = 3; break;
             case ChatTab.Whisper: _sendTargetIndex = 4; break;
+            default: if (_sendTargetIndex == 4) _sendTargetIndex = SavedSendTarget(); break;   // .Config.cs
         }
     }
 

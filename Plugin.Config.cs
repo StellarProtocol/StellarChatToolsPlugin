@@ -29,10 +29,17 @@ public sealed partial class Plugin
         // run before _loc is assigned). Only fall back when nothing was persisted.
         if (string.IsNullOrEmpty(_autoReplyText)) _autoReplyText = _loc.T("chat.autoReply.default");
 
-        // 0..3 only: Whisper (4) needs a picked conversation, so it is never a startup default (older configs could hold it).
-        _sendTargetIndex = Clamp(_cfg.Get(CfgSendTarget, 0), 0, 4);
-        if (_sendTargetIndex == 4) _sendTargetIndex = 0;
+        _sendTargetIndex = SavedSendTarget();
         LoadFavorites();   // .Favorites.cs — ordered favorite sticker ids ("stickerFavorites")
+    }
+
+    // The persisted default channel target, 0..3 only: Whisper (4) needs a picked conversation, so it is never a
+    // default (older configs could hold it) — it, or anything out of range, falls back to 0 = Say (the Current tab).
+    // Also the target when leaving the Whisper tab for All/System (.Composer.cs OnTabOpened).
+    private int SavedSendTarget()
+    {
+        int i = _cfg.Get(CfgSendTarget, 0);
+        return i >= 0 && i <= 3 ? i : 0;
     }
 
     private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
