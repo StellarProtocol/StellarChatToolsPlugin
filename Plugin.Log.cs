@@ -237,6 +237,8 @@ public sealed partial class Plugin
     private ColorRgba? LogSenderColor(int slot)
     {
         if (!TryMsg(slot, out var m)) return null;
+        // Inside the Whisper tab every message is a whisper, so every name (our own included) wears the whisper colour.
+        if (_activeTab == ChatTab.Whisper) return ChannelColor(ChatChannel.Whisper);
         return m.Channel == ChatChannel.System ? _services.Theme.Colors.MenuMuted : ChannelColor(m.Channel);
     }
 
