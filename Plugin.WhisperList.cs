@@ -23,9 +23,9 @@ namespace Stellar.ChatTools;
 /// under a marked row is NoCap (hugs its natural width, ignores MaxWidth — WindowBuilder-Patterns.md), which would stop
 /// long messages wrapping.
 ///
-/// List rows: [unread dot slot] [avatar] [name (bold, online dot before it) / one-line preview]. The text column is a
+/// List rows: [avatar] [name (bold, online dot before it, unread dot slot after it) / one-line preview]. The text column is a
 /// fixed-width cell placed LAST, so a long name or preview overflows only to the right, where the list viewport's own
-/// mask clips it (the VirtualList hard-clip pattern) — nothing is drawn over the dot or avatar. Right-click opens a small
+/// mask clips it (the VirtualList hard-clip pattern); name and preview are also ellipsized. Right-click opens a small
 /// menu (close conversation / copy name) — the sticker-menu popup pattern (Borderless + DismissOnOutsideClick, rect
 /// re-asserted once the hidden window remounts).
 /// </summary>
@@ -42,7 +42,7 @@ public sealed partial class Plugin
     private const float ConvRowHeight       = 50f;    // uniform VirtualList pitch (row content ≈ 47)
     private const int   ConvPoolSize        = 24;     // ≈ 960 px max viewport ÷ 50 + buffer
     private const int   ConvAvatarSize      = 32;
-    private const float ConvTextWidth       = 96f;    // 170 − 12 Selectable pad − 8 dot − 32 avatar − 2×6 gaps − 9 scrollbar lane
+    private const float ConvTextWidth       = 115f;   // 170 − 2×4 row pad − 32 avatar − 6 gap − 9 scrollbar lane
     private const int   OnlineDotSize       = 7;
     private const string OnlineDotResource  = "Stellar.ChatTools.Assets.online_dot.png";
 
@@ -153,33 +153,54 @@ public sealed partial class Plugin
 
     private long ConvIdAt(int slot) => ConvAtSlot(slot)?.CharId ?? 0;
 
-    private HudElement BuildConversationRow(int k) => new SelectableElement(
+    // Row = Bubble (the highlight) → Bare Selectable (click / hover / right-click, no visuals) → content. A normal
+    // SelectableElement pads its child 6 h / 4 v and the old row also opened with an 8-unit unread slot + a 6 gap, so the
+    // avatar sat 20 units in. The bubble pads 4 / 4 instead (same 4 vertical → same row height) and the unread dot moved
+    // after the name, so the avatar now sits 4 in. The bubble paints exactly what the Selectable did — the menu accent
+    // at the framework's selected / hover alphas on the same rounded chip (CornerRadius 0 = the SwatchBg rounding).
+    private HudElement BuildConversationRow(int k) => new BubbleElement(new SelectableElement(
         new RowElement(new HudElement[]
         {
-            // Unread dot slot — constant width whether shown or not (the tab-dot pattern, .Tabs.cs BuildTabLabel).
-            new CellElement(new ColumnElement(new HudElement[]
-            {
-                new ConditionalElement(() => ConvAtSlot(k) is { } c && HasUnread(c) && !IsViewingConversation(c.CharId),
-                    new RowElement(new HudElement[] { new ImageElement(UnreadDotPng, UnreadDotSize, UnreadDotSize) }),
-                    new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)),
-            }), Width: UnreadDotSize),
             new GameTextureElement(() => AvatarTextureFor(ConvIdAt(k)), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 },
             new CellElement(new ColumnElement(new HudElement[]
             {
+                // [online dot] [name…] [unread dot slot]. The name reports min 0 and is ellipsized (TMP), so a long name
+                // shrinks instead of pushing the dot out; the dot slot is a constant-width cell whether shown or not
+                // (the tab-dot pattern, .Tabs.cs) → a dot appearing never moves the name.
                 new RowElement(new HudElement[]
                 {
                     new ConditionalElement(() => ConvAtSlot(k)?.Online == true,
                         new RowElement(new HudElement[] { new ImageElement(OnlineDotPng, OnlineDotSize, OnlineDotSize) })),
-                    new TextElement(() => ConvAtSlot(k)?.Name is { Length: > 0 } n ? n : PeerName(ConvIdAt(k)), Emphasis: true, NoWrap: true),
+                    new TextElement(() => ConvAtSlot(k)?.Name is { Length: > 0 } n ? n : PeerName(ConvIdAt(k)), Emphasis: true, NoWrap: true)
+                        { Ellipsize = true },
+                    new CellElement(new ConditionalElement(() => ConvAtSlot(k) is { } c && HasUnread(c) && !IsViewingConversation(c.CharId),
+                        new RowElement(new HudElement[] { new ImageElement(UnreadDotPng, UnreadDotSize, UnreadDotSize) }),
+                        new SpacerElement(Width: UnreadDotSize, Height: UnreadDotSize)), Width: UnreadDotSize),
                 }, Gap: 4f),
-                new TextElement(() => ConvPreview(k), MutedCol, NoWrap: true) { RichEmoji = true },
+                new TextElement(() => ConvPreview(k), MutedCol, NoWrap: true) { RichEmoji = true, Ellipsize = true },
             }, Gap: 1f), Width: ConvTextWidth),
         }, Gap: 6f),
-        OnClick: () => SelectPeer(ConvIdAt(k)),
-        Selected: () => _selectedPeer != 0 && ConvIdAt(k) == _selectedPeer)
+        OnClick: () => SelectPeer(ConvIdAt(k)))
     {
+        Bare = true,
+        OnHover = on => { if (on) _convHoverSlot = k; else if (_convHoverSlot == k) _convHoverSlot = -1; },
         OnRightClick = () => OpenConvMenu(ConvIdAt(k)),
+    })
+    {
+        CornerRadius = 0f, PaddingX = ConvRowPad, PaddingY = ConvRowPad, FillColor = Transparent, FillColorFn = () => ConvRowFill(k),
     };
+
+    private int _convHoverSlot = -1;
+    private const float ConvRowPad = 4f;
+    // The framework SelectableElement's own tints (WindowBuilder SelOn / SelHover): menu accent at these alphas.
+    private const float ConvSelectedAlpha = 0.28f, ConvHoverAlpha = 0.14f;
+
+    private ColorRgba? ConvRowFill(int k)
+    {
+        var accent = _services.Theme.Colors.MenuAccent;
+        if (_selectedPeer != 0 && ConvIdAt(k) == _selectedPeer) return accent with { A = ConvSelectedAlpha };
+        return _convHoverSlot == k ? accent with { A = ConvHoverAlpha } : Transparent;
+    }
 
     // One-line preview of the latest message: the text (inline <sprite=N> emoji draw as pictures — RichEmoji), or a
     // localized [Sticker] / [Voice] / [Link] for the non-text kinds. Line breaks would add lines → flattened.
