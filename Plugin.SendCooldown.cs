@@ -104,9 +104,11 @@ public sealed partial class Plugin
     private bool RefusedFlashing() => _refusedUntil >= 0f && _services.Framework.TimeNow < _refusedUntil;
 
     // The Send pill is live only with something to send, a resolvable target and no cooldown / pending reply.
-    // Allocation-free (polled every refresh).
+    // Allocation-free (polled every refresh). Also off while the draft is being translated or is over the 140 cap (a long
+    // translation is kept whole, .TranslateOut.cs — the user trims it first).
     private bool CanSendNow()
-        => !string.IsNullOrWhiteSpace(_inputText) && HasSendTarget() && !CoolingDown();
+        => !string.IsNullOrWhiteSpace(_inputText) && _inputText.Length <= MaxMessageLength && !TrOutBusy()
+           && HasSendTarget() && !CoolingDown();
 
     private string SendLabel()
     {
@@ -147,11 +149,17 @@ public sealed partial class Plugin
     // matching the game's own 140 limit on the raw text).
     private bool CounterVisible() => _inputText.Length >= CounterShowAt;
 
+    // Over the cap (only a kept-whole translation gets there) the real count shows, e.g. "152/140", in the red.
     private string CharCounter()
     {
-        int n = Clamp(_inputText.Length, 0, MaxMessageLength);
-        return _counterLabels[n] ??= n + "/" + MaxMessageLength;
+        int n = _inputText.Length;
+        if (n <= MaxMessageLength) return _counterLabels[n] ??= n + "/" + MaxMessageLength;
+        if (n != _counterOverN) { _counterOverN = n; _counterOver = n + "/" + MaxMessageLength; }
+        return _counterOver;
     }
+
+    private int _counterOverN = -1;
+    private string _counterOver = "";
 
     private ColorRgba? CounterColor()
     {

@@ -33,7 +33,8 @@ public sealed partial class Plugin
     private const float TrFailLogIntervalSec = 60f;
     private static readonly HttpClient TrHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
-    private readonly record struct TrJob(long Key, string Text, string Target);
+    // Outgoing = a composer draft (.TranslateOut.cs), not a log message: its result goes to the composer, not a row.
+    private readonly record struct TrJob(long Key, string Text, string Target, bool Outgoing = false);
     private sealed record TrResult(string Text, string Src, bool Same);
 
     private readonly Queue<TrJob> _trQueue = new();
@@ -64,9 +65,11 @@ public sealed partial class Plugin
         _trByText[(text, target)] = r;
     }
 
-    private void EnqueueTranslation(long key, string text, string target)
+    private void EnqueueTranslation(long key, string text, string target) => EnqueueTranslation(new TrJob(key, text, target));
+
+    private void EnqueueTranslation(TrJob job)
     {
-        _trQueue.Enqueue(new TrJob(key, text, target));
+        _trQueue.Enqueue(job);
         PumpTranslations();
     }
 

@@ -50,7 +50,10 @@ public sealed partial class Plugin
     {
         return new ColumnElement(new HudElement[]
         {
-            // ONE composer row: [target chip ▾] [＋] [☺] [text field …] [n/140 near the cap] [Send]. Every control is
+            // Outgoing-translate status ("Translating to Thai…" / "文A Translated to Thai · Undo" / failed), shown only
+            // while a state is live (.TranslateOut.cs) — it takes one line from the log above while visible.
+            BuildTrOutStatus(),
+            // ONE composer row: [target chip ▾] [＋] [☺] [文A] [text field …] [n/140 near the cap] [Send]. Every control is
             // a 28-tall pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
             // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
             new RowElement(new HudElement[]
@@ -68,8 +71,12 @@ public sealed partial class Plugin
                 // CenterGlyphs: centre the drawn sprite, not the baseline-anchored line box (see BuildEmojiTabIcon).
                 BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
                     () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
+                // Translate-my-draft 文A (.TranslateOut.cs): click = language menu; busy / done / failed states.
+                BuildTrOutButton(),
+                // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
-                    { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder }, Weight: 1f),
+                    { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
+                      Locked = TrOutBusy }, Weight: 1f),
                 new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
                 BuildSendPill(),     // .SendCooldown.cs — channel-coloured; greyed + "Ns" while empty / cooling down
             // Min-width row (any language): the input is pinned at 160 (typing never grows it); the chip's label, the
@@ -101,8 +108,17 @@ public sealed partial class Plugin
     }
 
     // Soft-cap the field to the game's 140 chars; the FieldBinding re-seeds the field from _inputText on the
-    // next poll, so a truncation shows immediately.
-    private void SetInput(string s) => _inputText = s.Length > MaxMessageLength ? s.Substring(0, MaxMessageLength) : s;
+    // next poll, so a truncation shows immediately. Only TYPING past the cap is cut: a draft that is already longer (a
+    // translation, .TranslateOut.cs) is never cut silently — the red counter shows it and Send waits until it fits.
+    // An unchanged value (the field echoing our own re-seed) is not an edit.
+    private void SetInput(string s)
+    {
+        s ??= string.Empty;
+        if (string.Equals(s, _inputText, StringComparison.Ordinal)) return;
+        if (s.Length > MaxMessageLength && _inputText.Length <= MaxMessageLength) s = s.Substring(0, MaxMessageLength);
+        _inputText = s;
+        NoteDraftEdited();   // .TranslateOut.cs — the first edit hides the translate status line
+    }
 
     // Index -> the channel the echo of a send will arrive on (for self-identity round-trip learning).
     private ChatChannel SendChannel() => _sendTargetIndex switch
@@ -134,6 +150,7 @@ public sealed partial class Plugin
     private void DoSend()
     {
         if (string.IsNullOrWhiteSpace(_inputText)) return;
+        if (TrOutBusy() || _inputText.Length > MaxMessageLength) return;   // .TranslateOut.cs — translating / over the cap
         if (CoolingDown()) return;                 // .SendCooldown.cs
         if (ResolveTarget() is not { } target) return;
         NoteSelfSend(SendChannel(), _inputText);   // .Bubbles.cs — learn our identity from the echo
@@ -141,6 +158,7 @@ public sealed partial class Plugin
         NoteSendDispatched(_inputText);            // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
         JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
+        ResetTrOut();                              // .TranslateOut.cs — a send ends the translate status line
     }
 
     // True when the phrase was actually sent (false: blank, no target, or the target is cooling down).

@@ -88,7 +88,7 @@ public sealed partial class Plugin : IStellarPlugin
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕
                 // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs) or the settings window.
-                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseFriendPicker(); CloseSettings(); _window!.SetVisible(false); }),
+                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings(); _window!.SetVisible(false); }),
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -125,6 +125,9 @@ public sealed partial class Plugin : IStellarPlugin
         // Message right-click menu (.MessageMenu.cs): Copy message; same cursor-popup pattern.
         _msgMenuWindow = RegisterMsgMenuWindow();
         _services.Framework.Update += TickMsgMenu;
+        // Outgoing-translate language menu (.TranslateOut.Menu.cs) behind the composer 文A pill; same cursor-popup pattern.
+        _trOutMenuWindow = RegisterTrOutMenuWindow();
+        _services.Framework.Update += TickTrOutMenu;
     }
 
     public void Dispose()
@@ -137,6 +140,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickMsgMenu; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
         DisposeWhisper();
         DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
         _sayColor.Dispose();
@@ -151,6 +155,7 @@ public sealed partial class Plugin : IStellarPlugin
         _convMenuWindow?.Remove();
         _friendPickerWindow?.Remove();
         _settingsWindow?.Remove();
+        _trOutMenuWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }

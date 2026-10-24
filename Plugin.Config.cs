@@ -32,6 +32,7 @@ public sealed partial class Plugin
         _sendTargetIndex = SavedSendTarget();
         LoadFavorites();   // .Favorites.cs — ordered favorite sticker ids ("stickerFavorites")
         LoadTranslateConfig();   // .Translate.cs — target language ("translate.target") + hover button ("translate.hoverButton")
+        LoadTranslateOutConfig();   // .TranslateOut.Menu.cs — recent outgoing languages ("translate.outRecent")
     }
 
     // The persisted default channel target, 0..3 only: Whisper (4) needs a picked conversation, so it is never a

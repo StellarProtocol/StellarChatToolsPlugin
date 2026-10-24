@@ -42,9 +42,11 @@ public sealed partial class Plugin
     {
         if (idx < 0 || idx >= EmojiCount) return;
         _composerFocusSeq++;   // composer FocusRequest: hand the keyboard back to the field (caret at end) after the click
+        if (TrOutBusy()) return;   // .TranslateOut.cs — the box is locked while its draft is being translated
         var tag = EmojiTags[idx];
         if (_inputText.Length + tag.Length > MaxMessageLength) return;
         _inputText += tag;   // FieldBinding re-seeds the composer field from Get() on the next poll
+        NoteDraftEdited();   // an edit like typing: hides a translate status line
     }
 
     // The emoji tab's icon: a RichEmoji <sprite=1>, centred like the texture tabs (icon-only, no localized label).

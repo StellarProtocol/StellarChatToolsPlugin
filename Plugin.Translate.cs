@@ -256,11 +256,23 @@ public sealed partial class Plugin
     // takes it — the user may have switched target and re-clicked meanwhile.
     private void ApplyTranslation(TrJob job, TrResult r)
     {
+        if (job.Outgoing) { ApplyOutgoingTranslation(job, r); return; }   // a composer draft (.TranslateOut.cs)
+        ApplyRowTranslation(job, r);
+    }
+
+    private void ApplyRowTranslation(TrJob job, TrResult r)
+    {
         if (!_tr.TryGetValue(job.Key, out var e) || e.Phase != TrPhase.Pending || e.Target != job.Target) return;
         e.Result = r; e.Phase = TrPhase.Done; e.Showing = true; e.Tag = null; e.Rev++;
     }
 
     private void FailTranslation(TrJob job)
+    {
+        if (job.Outgoing) { FailOutgoingTranslation(job); return; }
+        FailRowTranslation(job);
+    }
+
+    private void FailRowTranslation(TrJob job)
     {
         if (!_tr.TryGetValue(job.Key, out var e) || e.Phase != TrPhase.Pending || e.Target != job.Target) return;
         e.Phase = TrPhase.Failed; e.Rev++;
