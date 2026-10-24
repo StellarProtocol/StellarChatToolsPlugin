@@ -14,6 +14,7 @@
   "chat.color.world": "Teksto ng Mundo",
   "chat.composer.cooldown": "{0}s",
   "chat.composer.notSent": "Hindi naipadala",
+  "chat.composer.notSentOffline": "Hindi naipadala ang mensahe: nawala ang koneksyon. Nasa ibaba pa rin ang iyong teksto.",
   "chat.composer.placeholder": "Magmensahe sa {0}…",
   "chat.composer.tooFast": "Masyadong mabilis",
   "chat.cooldown": "Cooldown: {0:0}s bawat nagpadala",

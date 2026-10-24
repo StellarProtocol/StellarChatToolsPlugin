@@ -166,6 +166,7 @@ public sealed partial class Plugin
         // An open conversation also shows its saved history (.WhisperHistory.cs) — every saved line the server didn't
         // provide, merged in time order. Unloaded / no saved file → the server list unchanged.
         if (peer > 0) ordered = MergeSavedWhispers(peer, ordered);
+        MergeLocalNotices(ordered);   // .LocalNotice.cs — this view's local-only lines (e.g. "message not sent")
         _filtered.Clear();
         _filtered.AddRange(ordered);
 

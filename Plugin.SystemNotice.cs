@@ -52,6 +52,11 @@ public sealed partial class Plugin
         string muted = _noticeMutedHex, sys = _noticeSysHex;
         long key = NoticeKey(m);
         if (_noticeLine[slot] is { } cached && _noticeKey[slot] == key) return cached;
+        if (IsLocalNotice(m))   // .LocalNotice.cs — local-only line: time + red text, no "System" label
+        {
+            _noticeKey[slot] = key;
+            return _noticeLine[slot] = LocalNoticeLine(m, muted);
+        }
         var time = m.Timestamp.ToLocalTime().ToString("HH:mm");
         // Client notices keep the game's own colour tags; a SERVER System line (TopNotice / Play, SystemLabel null) is wire
         // text like any chat message, so it is sanitized the way the game's GetMsg does (ChatMarkup.SafeBody).

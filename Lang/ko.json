@@ -14,6 +14,7 @@
   "chat.color.world": "월드 텍스트",
   "chat.composer.cooldown": "{0}초",
   "chat.composer.notSent": "전송 실패",
+  "chat.composer.notSentOffline": "메시지를 보내지 못했습니다: 연결이 끊겼습니다. 입력한 내용은 아래에 남아 있습니다.",
   "chat.composer.placeholder": "{0}에 메시지 보내기…",
   "chat.composer.tooFast": "너무 빠릅니다",
   "chat.cooldown": "쿨타임: 발신자당 {0:0}초",

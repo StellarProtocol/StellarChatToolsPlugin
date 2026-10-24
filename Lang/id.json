@@ -14,6 +14,7 @@
   "chat.color.world": "Warna teks Dunia",
   "chat.composer.cooldown": "{0}d",
   "chat.composer.notSent": "Gagal terkirim",
+  "chat.composer.notSentOffline": "Pesan tidak terkirim: koneksi terputus. Teks Anda tetap tersimpan di bawah.",
   "chat.composer.placeholder": "Kirim pesan ke {0}…",
   "chat.composer.tooFast": "Terlalu cepat",
   "chat.cooldown": "Cooldown: {0:0}d per pengirim",

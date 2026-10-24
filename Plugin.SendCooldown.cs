@@ -139,9 +139,8 @@ public sealed partial class Plugin
         OnLocalSendFailed();
     }
 
-    // Hook for the "message not sent" notice (its UI is being prototyped separately — Session Rule 14; it attaches here).
-    // Deliberately empty for now: the only behaviour change is that the draft / picker / phrase popover is kept.
-    private void OnLocalSendFailed() { }
+    // The "message not sent" notice (approved option B): a local-only red line in the current view, the draft kept.
+    private void OnLocalSendFailed() => AddSendFailedNotice();   // .LocalNotice.cs — red line in the current view
 
     private bool RefusedFlashing() => _refusedUntil >= 0f && _services.Framework.TimeNow < _refusedUntil;
 

@@ -14,6 +14,7 @@
   "chat.color.world": "สีข้อความโลก",
   "chat.composer.cooldown": "{0} วิ",
   "chat.composer.notSent": "ส่งไม่สำเร็จ",
+  "chat.composer.notSentOffline": "ส่งข้อความไม่สำเร็จ: การเชื่อมต่อขาดหาย ข้อความของคุณยังอยู่ด้านล่าง",
   "chat.composer.placeholder": "ส่งข้อความถึง{0}…",
   "chat.composer.tooFast": "ส่งเร็วเกินไป",
   "chat.cooldown": "คูลดาวน์: {0:0} วินาทีต่อผู้ส่ง",

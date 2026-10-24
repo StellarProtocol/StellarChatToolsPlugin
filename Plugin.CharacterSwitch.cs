@@ -100,6 +100,7 @@ public sealed partial class Plugin
         _newest.Clear();
         _lastSeen.Clear();
         ResetNewBelow();
+        ClearLocalNotices();   // .LocalNotice.cs — session-only, per character
 
         var ring = _chat.RecentMessages;
         _logCutoff = fallback ? _lastConfirmedTail : ring.Count > 0 ? ring[ring.Count - 1] : null;
