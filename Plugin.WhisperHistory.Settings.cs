@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
 
@@ -6,7 +7,7 @@ namespace Stellar.ChatTools;
 
 /// <summary>
 /// The Settings window's "Whisper history" section (after Translation): the keep toggle, the where/how-much note, and a
-/// two-step "Clear saved whisper history" button with this character's stats beside it. First click arms it (solid red,
+/// two-step "Clear saved whisper history" button with this character's stats on the line below it. First click arms it (solid red,
 /// "Click again to delete", a Cancel pill + a scope note; reverts by itself after <see cref="HistConfirmSec"/>); the
 /// second deletes this character's files on the I/O worker and drops the in-memory copy at once.
 /// </summary>
@@ -20,7 +21,7 @@ public sealed partial class Plugin
     private float _histConfirmUntil;   // > now = armed
     private float _histClearedUntil;   // > now = show "Cleared" in the stats slot
     private int _histStatsBuiltRev = -1;
-    private string? _histStatsTpl, _histStatsName;
+    private string? _histStatsTpl, _histStatsSub, _histStatsName;
     private string _histStatsText = "";
 
     private bool HistConfirming() => _histConfirmUntil > _services.Framework.TimeNow;
@@ -48,9 +49,11 @@ public sealed partial class Plugin
             new ConditionalElement(HistConfirming,
                 BuildPill(() => _loc.T("chat.history.cancel"), () => _services.Theme.Colors.MenuText,
                     () => _services.Theme.Colors.MenuText with { A = 0.08f }, CancelClearHistory)),
-            // Weight cell (min 0) + ellipsis: the armed row's extra Cancel pill squeezes the stats instead of the window.
-            new CellElement(new TextElement(HistStatsText, MutedCol, NoWrap: true) { Ellipsize = true }, Weight: 1f),
         }, Gap: 6f),
+        // The stats get their OWN line. Beside the pill, the stats cell pushed the row's preferred width past the window,
+        // and the layout then shrank EVERY child toward its min — the pill too, so its NoWrap label spilled across the
+        // stats. The pills alone fit (idle or armed), so each keeps its label width; a long name here just wraps.
+        new TextElement(HistStatsText, MutedCol),
         new ConditionalElement(HistConfirming, new TextElement(() => _loc.T("chat.history.confirmNote"), MutedCol)),
     }, Gap: 4f);
 
@@ -97,13 +100,17 @@ public sealed partial class Plugin
         _services.Log.Info($"[ChatTools] whisper history cleared ({_histKey})");
     }
 
-    // "<character> · N conversations · M messages" from the in-memory index (cheap; rebuilt only when it changes).
+    // "<character> · N conversation(s) · M message(s)" from the in-memory index (cheap; rebuilt only when it changes).
     private string HistStatsText()
     {
         if (_histClearedUntil > _services.Framework.TimeNow) return _loc.T("chat.history.cleared");
         var tpl = _loc.T("chat.history.stats");
+        // The "{0} · {1} · {2}" frame is the same in every locale, so it can't detect a language switch — a count
+        // template (which differs per locale) is the cache key too.
+        var sub = _loc.T("chat.history.msgs.other");
         var name = SelfName() ?? "";
         if (_histStatsBuiltRev == _histStatsRev && string.Equals(tpl, _histStatsTpl, StringComparison.Ordinal)
+            && string.Equals(sub, _histStatsSub, StringComparison.Ordinal)
             && string.Equals(name, _histStatsName, StringComparison.Ordinal))
             return _histStatsText;
         int convs = 0, msgs = 0;
@@ -112,9 +119,18 @@ public sealed partial class Plugin
             int n = sp.Msgs?.Count ?? sp.Info.Count;
             if (n > 0) { convs++; msgs += n; }
         }
-        try { _histStatsText = string.Format(System.Globalization.CultureInfo.InvariantCulture, tpl, name, convs, msgs); }
+        try
+        {
+            _histStatsText = string.Format(CultureInfo.InvariantCulture, tpl, name,
+                Counted("chat.history.convs", convs), Counted("chat.history.msgs", msgs));
+        }
         catch (FormatException) { _histStatsText = tpl; }
-        _histStatsBuiltRev = _histStatsRev; _histStatsTpl = tpl; _histStatsName = name;
+        _histStatsBuiltRev = _histStatsRev; _histStatsTpl = tpl; _histStatsSub = sub; _histStatsName = name;
         return _histStatsText;
     }
+
+    // "<n> conversation(s)": every locale ships both .one and .other (identical where the language has no plural, e.g.
+    // ja/ko/th/id/fil), so the choice stays a plain n == 1 here with no per-language rules.
+    private string Counted(string key, int n)
+        => string.Format(CultureInfo.InvariantCulture, _loc.T(key + (n == 1 ? ".one" : ".other")), n);
 }
