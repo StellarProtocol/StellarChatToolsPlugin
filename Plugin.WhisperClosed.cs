@@ -69,13 +69,27 @@ public sealed partial class Plugin
         HistIo(() => _services.Data.Write(name, bytes));
     }
 
-    // From SetHistoryKey, queued on the I/O chain right after the index read.
-    private void LoadClosedPeers(string key, int gen)
-        => HistIo(() =>
-        {
-            var map = WhisperHistoryFormat.ReadClosed(_services.Data.Read(ClosedFile(key)));
-            _services.Framework.Post(() => OnClosedLoaded(gen, map));
-        });
+    // I/O worker, from SetHistoryKey's chain step: after the legacy-folder migration (which merges a fallback folder's
+    // closed.json in), before the index read.
+    private void ReadClosedPeersOnWorker(string key, int gen)
+    {
+        var map = WhisperHistoryFormat.ReadClosed(_services.Data.Read(ClosedFile(key)));
+        _services.Framework.Post(() => OnClosedLoaded(gen, map));
+    }
+
+    // I/O worker, from MigrateLegacyFolder: union the fallback folder's closed set into the UID folder's (the later mark
+    // wins). False = the write didn't verify (the source is then kept, like the peer files).
+    private bool MergeClosedFile(string from, string to)
+    {
+        var src = WhisperHistoryFormat.ReadClosed(_services.Data.Read(ClosedFile(from)));
+        if (src.Count == 0) return true;
+        var dst = WhisperHistoryFormat.ReadClosed(_services.Data.Read(ClosedFile(to)));
+        foreach (var kv in src)
+            if (!dst.TryGetValue(kv.Key, out var mark) || kv.Value > mark) dst[kv.Key] = kv.Value;
+        var bytes = WhisperHistoryFormat.WriteClosed(new List<KeyValuePair<long, long>>(dst));
+        _services.Data.Write(ClosedFile(to), bytes);
+        return _services.Data.Read(ClosedFile(to))?.Length == bytes.Length;
+    }
 
     // Merge the file under this session's closes / reopens, then close what the game's list re-added meanwhile.
     private void OnClosedLoaded(int gen, Dictionary<long, long> fromFile)

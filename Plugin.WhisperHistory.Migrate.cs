@@ -90,6 +90,7 @@ public sealed partial class Plugin
         var idxBytes = WhisperHistoryFormat.WriteIndex(charName, list);
         _services.Data.Write(IndexFile(to), idxBytes);
         if (_services.Data.Read(IndexFile(to))?.Length != idxBytes.Length) allWritten = false;
+        if (!MergeClosedFile(from, to)) allWritten = false;   // .WhisperClosed.cs — closed conversations move too
 
         if (!allWritten)
         {
@@ -97,6 +98,7 @@ public sealed partial class Plugin
             return;
         }
         foreach (var name in moved) _services.Data.Delete(name);
+        _services.Data.Delete(ClosedFile(from));
         _services.Data.Delete(IndexFile(from));   // the (now empty) directory itself stays; the store can't remove it
         _services.Log.Info($"[ChatTools] whisper history: merged {from} into {to} ({peers} conversations, {added} new messages)");
     }

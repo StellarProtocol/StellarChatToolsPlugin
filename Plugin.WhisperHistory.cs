@@ -159,12 +159,12 @@ public sealed partial class Plugin
         var legacy = "whisper." + LegacyUid(_histChar);
         string charName = SelfName() ?? "";
         bool migrate = _histChar != 0 && !string.Equals(key, legacy, StringComparison.Ordinal);
-        // Closed conversations first (.WhisperClosed.cs): its result is posted BEFORE the index's, so the saved-only
-        // conversations of closed peers are never listed even for a frame.
-        LoadClosedPeers(key, gen);
         HistIo(() =>
         {
-            if (migrate) MigrateLegacyFolder(legacy, key, charName);
+            if (migrate) MigrateLegacyFolder(legacy, key, charName);   // also merges its closed.json
+            // Closed conversations first (.WhisperClosed.cs): posted BEFORE the index, so the saved-only conversations of
+            // closed peers are never listed even for a frame.
+            ReadClosedPeersOnWorker(key, gen);
             var list = WhisperHistoryFormat.ReadIndex(_services.Data.Read(IndexFile(key)));
             _services.Framework.Post(() => OnIndexLoaded(gen, list));
         });

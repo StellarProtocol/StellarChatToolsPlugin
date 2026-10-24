@@ -107,7 +107,16 @@ public sealed partial class Plugin
         RemoveSavedOnlyConversations();  // .Whisper.cs
         ClearClosedPeers();              // .WhisperClosed.cs — closed.json goes with the folder below
         _logDirty = true;
-        HistIo(() => { foreach (var name in _services.Data.List(prefix)) _services.Data.Delete(name); });
+        // This character's charId-fallback folder too (.WhisperHistory.Migrate.cs): left behind when a merge hit a write
+        // failure, or written while the UID never read — it would otherwise merge the "cleared" history back in at the
+        // next login. closed.json is deleted with the rest of each folder.
+        var legacy = "whisper." + LegacyUid(_histChar) + "/";
+        bool alsoLegacy = _histChar != 0 && !string.Equals(legacy, prefix, StringComparison.Ordinal);
+        HistIo(() =>
+        {
+            foreach (var name in _services.Data.List(prefix)) _services.Data.Delete(name);
+            if (alsoLegacy) foreach (var name in _services.Data.List(legacy)) _services.Data.Delete(name);
+        });
         _histClearedUntil = _services.Framework.TimeNow + HistClearedSec;
         _services.Log.Info($"[ChatTools] whisper history cleared ({_histKey})");
     }
