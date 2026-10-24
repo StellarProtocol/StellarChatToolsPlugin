@@ -38,6 +38,8 @@
     <EmbeddedResource Include="Assets/chevron_dark.png" LogicalName="Stellar.ChatTools.Assets.chevron_dark.png" />
     <!-- Whisper online dot (32x32 green, shown at 7 px) for the conversation list + header (Plugin.WhisperList.cs). -->
     <EmbeddedResource Include="Assets/online_dot.png" LogicalName="Stellar.ChatTools.Assets.online_dot.png" />
+    <!-- Stellar menu (launcher) tile icon, 128x128 RGBA, read once via GetManifestResourceStream (Plugin.cs). -->
+    <EmbeddedResource Include="Resources/chattools-icon.png" LogicalName="Stellar.ChatTools.Resources.chattools-icon.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
        reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences

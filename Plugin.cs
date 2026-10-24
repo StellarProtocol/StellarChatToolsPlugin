@@ -35,6 +35,7 @@ public sealed partial class Plugin : IStellarPlugin
     private readonly ILocalization _loc;
     private readonly IChat _chat;
     private readonly IWindowControl _window;
+    private readonly IDisposable _launcher;   // Stellar menu tile; disposed with the plugin
     private IConfigSection _cfg = null!;   // set in LoadConfig() (ctor), before any save
 
     // Per-channel sender-name colours. ChatTools-owned, user-editable slots: edited through the framework
@@ -136,6 +137,32 @@ public sealed partial class Plugin : IStellarPlugin
         // Outgoing-translate language menu (.TranslateOut.Menu.cs) behind the composer 文A pill; same cursor-popup pattern.
         _trOutMenuWindow = RegisterTrOutMenuWindow();
         _services.Framework.Update += TickTrOutMenu;
+
+        // Stellar menu tile — the second way to open the chat besides the hotkey. "ChatTools" is the product name (also
+        // the stable pin identity), so it stays unlocalized like the other plugins' product-name tiles. Show, not
+        // toggle: a tile click on an already-open chat is a no-op rather than a surprise close.
+        _launcher = _services.Launcher.Register(new LauncherEntry(
+            Title:   "ChatTools",
+            IconPng: LoadLauncherIcon(),
+            IconKey: null,
+            OnOpen:  () => _window.SetVisible(true))
+        { Group = LauncherGroup.Plugin,
+          ShouldShow = () => _services.ClientState.Phase == GamePhase.World });
+    }
+
+    private const string LauncherIconResource = "Stellar.ChatTools.Resources.chattools-icon.png";
+
+    private static byte[]? LoadLauncherIcon()
+    {
+        try
+        {
+            using var s = typeof(Plugin).Assembly.GetManifestResourceStream(LauncherIconResource);
+            if (s == null) return null;   // tile still shows, just without an icon
+            using var ms = new System.IO.MemoryStream();
+            s.CopyTo(ms);
+            return ms.ToArray();
+        }
+        catch { return null; }
     }
 
     // ✕ close: also write any pending whisper history now (.WhisperHistory.cs) instead of waiting out its 2 s batch.
@@ -164,6 +191,7 @@ public sealed partial class Plugin : IStellarPlugin
 
     public void Dispose()
     {
+        try { _launcher.Dispose(); } catch { /* swallow */ }
         try { _services.ClientState.PhaseChanged -= OnPhaseChanged; } catch { /* swallow */ }
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _chat.SendResult -= OnSendResult; } catch { /* swallow */ }
