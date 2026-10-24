@@ -68,6 +68,10 @@ public sealed partial class Plugin : IStellarPlugin
                     Category:    WindowCategory.HUD,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
+                    // Starts HIDDEN: opened only by the hotkey or the Stellar menu tile. StartVisible covers boot;
+                    // OnPhaseChanged re-hides on every later world entry (Visible is session state, so a window left
+                    // open at logout would otherwise come back up on the next character's login).
+                    StartVisible = false,
                     ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
                     // Render on our OWN nested canvas (a uGUI batching boundary). The log is a ScrollRect: scrolling
                     // moves its content every frame, which dirties + rebatches whatever canvas it lives on. On the
@@ -87,9 +91,7 @@ public sealed partial class Plugin : IStellarPlugin
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕
-                // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs) or the settings window.
-                // Also write any pending whisper history now (.WhisperHistory.cs) instead of waiting out its 2 s batch.
-                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings(); FlushHistory(); _window!.SetVisible(false); }),
+                OnClose: CloseChat),   // closes popups + settings and flushes whisper history (below)
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -100,6 +102,9 @@ public sealed partial class Plugin : IStellarPlugin
         // whisper auto-reply. The handler early-outs when auto-reply is off, so the only cost of being
         // always-subscribed is the unread bookkeeping we need regardless of the window being open.
         _chat.MessageReceived += OnChatMessage;   // fires on the Unity main thread
+        // Re-hide on each world entry (see StartVisible above). Phase stays World through in-world zone loads, so this
+        // fires once per character login, never on a teleport/dungeon load mid-session.
+        _services.ClientState.PhaseChanged += OnPhaseChanged;
         // The server's verdict on each send (.SendCooldown.cs): ends the optimistic Send hold, flashes a refusal, and
         // restores a refused draft. The cooldown length itself is polled from IChat.TryGetSendCooldown.
         _chat.SendResult += OnSendResult;
@@ -133,8 +138,33 @@ public sealed partial class Plugin : IStellarPlugin
         _services.Framework.Update += TickTrOutMenu;
     }
 
+    // ✕ close: also write any pending whisper history now (.WhisperHistory.cs) instead of waiting out its 2 s batch.
+    private void CloseChat()
+    {
+        FlushHistory();
+        HideChat();
+    }
+
+    // Hide the chat and everything hanging off it — don't strand the popups (.SendTarget.cs / .WhisperList.cs /
+    // .FriendPicker.cs) or the settings window. Session-only SetVisible (the framework hotkey toggle uses it too):
+    // visibility is deliberately NOT persisted, so the window never restores itself open. Position/size persist
+    // independently of visibility.
+    private void HideChat()
+    {
+        CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings();
+        _window.SetVisible(false);
+    }
+
+    // World entry → start hidden. No FlushHistory here: the logout path already flushed, and at this edge _histKey may
+    // still name the PREVIOUS character while SelfName() already returns the new one (would mislabel its index).
+    private void OnPhaseChanged(PhaseChange change)
+    {
+        if (change.To == GamePhase.World && change.From != GamePhase.World) HideChat();
+    }
+
     public void Dispose()
     {
+        try { _services.ClientState.PhaseChanged -= OnPhaseChanged; } catch { /* swallow */ }
         try { _chat.MessageReceived -= OnChatMessage; } catch { /* swallow */ }
         try { _chat.SendResult -= OnSendResult; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickFavMenuPlace; } catch { /* swallow */ }
