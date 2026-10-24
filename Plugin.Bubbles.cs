@@ -92,8 +92,9 @@ public sealed partial class Plugin
         // into the texture's alpha at decode time (BakeRoundedAvatar, driven by AvatarCornerFraction) — so CornerRadius=0
         // here (no per-row stencil Mask, which would break UI batching + add stencil draw calls every drawn frame).
         // Everyone resolves to the shared default face until (and unless) their real photo loads.
-        var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
-            { CornerRadius = 0 };
+        // Click = the game's name card for the sender (.NameCard.cs); keyed by the pool slot for the hover ring.
+        var avatar = ClickableAvatar(new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)
+            { CornerRadius = 0 }, i, AvatarSize, () => SenderCharId(i, self));
 
         // ⚠️ The sticker-vs-text ConditionalElement MUST wrap the WHOLE bubble — it must NEVER sit INSIDE the bubble's
         // measured child. BubbleBinding.Apply() hugs the bubble each tick by reading LayoutUtility.GetPreferredWidth(

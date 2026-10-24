@@ -105,7 +105,8 @@ public sealed partial class Plugin
             new BubbleElement(new SpacerElement(Width: HeaderStripW, Height: HeaderContentH))
                 { FillColor = Transparent, FillColorFn = () => ChannelColor(ChatChannel.Whisper), CornerRadius = 2f, PaddingX = 0f, PaddingY = 0f },
             new ConditionalElement(() => _selectedPeer != 0,
-                new GameTextureElement(() => AvatarTextureFor(_selectedPeer), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 }),
+                ClickableAvatar(new GameTextureElement(() => AvatarTextureFor(_selectedPeer), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 },
+                    AvatarKeyHeader, ConvAvatarSize, () => _selectedPeer)),   // click = name card (.NameCard.cs)
             new CellElement(new ColumnElement(new HudElement[]
             {
                 new TextElement(HeaderTitle, () => _selectedPeer != 0 ? TabActiveText(ChatTab.Whisper) : _services.Theme.Colors.MenuMuted,
@@ -192,7 +193,10 @@ public sealed partial class Plugin
     private HudElement BuildConversationRow(int k) => new BubbleElement(new SelectableElement(
         new RowElement(new HudElement[]
         {
-            new GameTextureElement(() => AvatarTextureFor(ConvIdAt(k)), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 },
+            // Avatar click = name card (.NameCard.cs) — its own inner Button takes the click, so it does NOT also select
+            // the conversation; the rest of the row still does.
+            ClickableAvatar(new GameTextureElement(() => AvatarTextureFor(ConvIdAt(k)), ConvAvatarSize, ConvAvatarSize) { CornerRadius = 0 },
+                AvatarKeyConvBase + k, ConvAvatarSize, () => ConvIdAt(k)),
             new CellElement(new ColumnElement(new HudElement[]
             {
                 // [online dot] [name…] [unread dot slot]. The name reports min 0 and is ellipsized (TMP), so a long name
