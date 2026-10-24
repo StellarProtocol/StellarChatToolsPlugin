@@ -228,12 +228,22 @@ public sealed partial class Plugin
     // Rest: "<color=#RRGGBB59><u></color>Name</u>" — TMP takes the underline colour from the colour current when <u>
     // opens, so the underline is faint while the glyphs keep the full ColorFn colour. Hover: a plain <u> (underline in
     // the text colour = solid). Underline and colour tags have no width, so rest and hover lay out identically.
+    private ColorRgba _whisperHexFor;
+    private string? _whisperHex;
+
+    private string WhisperHex()
+    {
+        var c = _whisperColor.Value;
+        if (_whisperHex == null || !c.Equals(_whisperHexFor)) { _whisperHexFor = c; _whisperHex = Hex(c); }   // .SystemNotice.cs
+        return _whisperHex;
+    }
+
     private string NameLinkText(int slot, bool self)
     {
         var name = NameLinkName(slot, self);
         if (string.IsNullOrEmpty(name)) return "";
         bool hover = _nameHoverSlot == slot;
-        var col = hover ? "" : Hex(_whisperColor.Value);   // .SystemNotice.cs — "#RRGGBB"
+        var col = hover ? "" : WhisperHex();   // "#RRGGBB", cached per colour (was one string per row per refresh)
         if (_nameLinkCache.TryGetValue(slot, out var e) && e.Hover == hover
             && string.Equals(e.Name, name, StringComparison.Ordinal) && string.Equals(e.Col, col, StringComparison.Ordinal))
             return e.Text;

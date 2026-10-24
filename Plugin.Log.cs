@@ -275,9 +275,20 @@ public sealed partial class Plugin
         return id;
     }
 
-    // Compact timestamp (HH:mm — the game drops seconds in its bubble layout).
+    // Compact timestamp (HH:mm — the game drops seconds in its bubble layout). Polled per slot every refresh, so the string
+    // is cached per pool slot and re-formatted only when that slot shows a different MINUTE (was one alloc per slot per poll).
     private string LogTime(int slot)
-        => TryMsg(slot, out var m) ? m.Timestamp.ToLocalTime().ToString("HH:mm") : "";
+    {
+        if (!TryMsg(slot, out var m)) return "";
+        long minute = m.Timestamp.Ticks / TimeSpan.TicksPerMinute;
+        if ((uint)slot >= (uint)LogPoolSize) return m.Timestamp.ToLocalTime().ToString("HH:mm");
+        if (_timeMinute[slot] == minute && _timeText[slot] is { } hit) return hit;
+        _timeMinute[slot] = minute;
+        return _timeText[slot] = m.Timestamp.ToLocalTime().ToString("HH:mm");
+    }
+
+    private readonly long[] _timeMinute = new long[LogPoolSize];
+    private readonly string?[] _timeText = new string?[LogPoolSize];
 
     // Bubble body, TMP-safe (ChatMarkup: only <sprite=N> survives from the wire). Polled every refresh, so the sanitized
     // string is cached per pool slot and recomputed only when the slot shows a different text (same-instance check).
