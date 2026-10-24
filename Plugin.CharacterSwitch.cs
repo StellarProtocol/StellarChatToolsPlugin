@@ -39,8 +39,13 @@ public sealed partial class Plugin
     // immutable records the framework stores, so the same object is found again until it front-drops off the ring
     // (then everything left is newer and the whole ring shows).
     private ChatMessage? _logCutoff;
-    // The ring's newest message on the last stable in-world tick of the CURRENT character — the fallback's cut point.
-    private ChatMessage? _lastConfirmedTail;
+    // The newest CHAT (non-notice) message at the same point. RecentMessages is two framework rings merged by arrival —
+    // client system notices (SystemLabel set) are capped separately and rotate faster — so a notice cut point can drop
+    // off its ring while older chat is still there. LogStartIndex then falls back to this one.
+    private ChatMessage? _logCutoffChat;
+    // The ring's newest message (and newest chat message) on the last stable in-world tick of the CURRENT character —
+    // the fallback's cut points.
+    private ChatMessage? _lastConfirmedTail, _lastConfirmedChatTail;
 
     // After a reset the cached IFriends lists are the PREVIOUS character's until the new one's are polled (in-world only,
     // every 2.5 s, and Changed fires only when the polled text differs). So nothing is merged from them until a Changed
@@ -98,7 +103,8 @@ public sealed partial class Plugin
 
         var ring = _chat.RecentMessages;
         _logCutoff = fallback ? _lastConfirmedTail : ring.Count > 0 ? ring[ring.Count - 1] : null;
-        _lastConfirmedTail = null;
+        _logCutoffChat = fallback ? _lastConfirmedChatTail : ChatTail(ring);
+        _lastConfirmedTail = _lastConfirmedChatTail = null;
         _prevStateChar = _stateChar;
         _stateChar = 0;
         _tabResetPending = true;
@@ -126,6 +132,7 @@ public sealed partial class Plugin
         }
         var ring = _chat.RecentMessages;
         _lastConfirmedTail = ring.Count > 0 ? ring[ring.Count - 1] : null;
+        _lastConfirmedChatTail = ChatTail(ring);
     }
 
     // Fallback only: feed the ring messages after the cut back through the per-character bookkeeping, now that self is
@@ -149,11 +156,29 @@ public sealed partial class Plugin
     // First ring index the log may show (just past the reset cutoff). A linear scan, but only on a dirty rebuild.
     private int LogStartIndex(IReadOnlyList<ChatMessage> ring)
     {
-        if (_logCutoff == null) return 0;
-        for (int i = ring.Count - 1; i >= 0; i--)
-            if (ReferenceEquals(ring[i], _logCutoff)) return i + 1;
-        _logCutoff = null;   // front-dropped: everything left arrived after it
+        if (_logCutoff != null)
+        {
+            for (int i = ring.Count - 1; i >= 0; i--)
+                if (ReferenceEquals(ring[i], _logCutoff)) return i + 1;
+            _logCutoff = null;   // front-dropped off its ring
+        }
+        // The cut point was a notice its own (faster) ring has dropped — or it was chat and is gone too: cut after the
+        // newest chat message of the reset point instead. Not found either → everything left arrived after it.
+        if (_logCutoffChat != null)
+        {
+            for (int i = ring.Count - 1; i >= 0; i--)
+                if (ReferenceEquals(ring[i], _logCutoffChat)) return i + 1;
+            _logCutoffChat = null;
+        }
         return 0;
+    }
+
+    // Newest non-notice entry of the ring (null = none). Usually the last or second-to-last entry.
+    private static ChatMessage? ChatTail(IReadOnlyList<ChatMessage> ring)
+    {
+        for (int i = ring.Count - 1; i >= 0; i--)
+            if (ring[i].SystemLabel == null) return ring[i];
+        return null;
     }
 
     // Second discriminator behind the cutoff: a whisper with a recorded target names both parties, so a targeted one
