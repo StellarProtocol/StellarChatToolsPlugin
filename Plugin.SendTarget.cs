@@ -117,21 +117,29 @@ public sealed partial class Plugin
     // pill's busy state (.Translate.cs); it is an overlay, so it never changes the pill's size.
     private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick, float width = 0f,
         Func<ColorRgba?>? outline = null)
+        => new CellElement(PillBubble(content, fill, onClick, width > 0f, outline), Width: width);
+
+    // The pill's Bubble without BuildPill's Cell. ⚠️ A Bubble with MaxWidth 0 caps at its PARENT's width, and a natural
+    // Cell is sized FROM the bubble — so a pill whose label changes at runtime (arm/disarm, a language switch) can only
+    // ever shrink: it shrinks to a shorter label, then the longer label is capped at that width and spills out of the box.
+    // Composer/tab pills dodge it (NoCap rows); "+ New chat" too (a Column stretches its Cell). Elsewhere either put this
+    // bubble DIRECTLY in a Row that a Column stretches (cap = the full row = wraps only past the window), or set
+    // `maxWidth` (a static cap, independent of the parent).
+    private BubbleElement PillBubble(HudElement[] content, Func<ColorRgba?> fill, Action onClick, bool icon = false,
+        Func<ColorRgba?>? outline = null, float maxWidth = 0f)
     {
-        bool icon = width > 0f;
         var row = new HudElement[content.Length + 2];
         row[0] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
         Array.Copy(content, 0, row, 1, content.Length);
         row[row.Length - 1] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
-        return new CellElement(new BubbleElement(new SelectableElement(
+        return new BubbleElement(new SelectableElement(
                 new RowElement(row, Gap: icon ? IconPillGap : PillGap, Justify: RowJustify.Center),
                 OnClick: onClick))
             {
                 // Transparent static fill (NOT null — null = the themed accent default); FillColorFn re-tints live.
                 CornerRadius = PillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent, FillColorFn = fill,
-                OutlineColorFn = outline,
-            },
-            Width: width);
+                OutlineColorFn = outline, MaxWidth = maxWidth,
+            };
     }
 
     private HudElement BuildPill(Func<string> label, Func<ColorRgba?> text, Func<ColorRgba?> fill, Action onClick)

@@ -17,6 +17,7 @@ public sealed partial class Plugin
     private const float HistClearedSec = 3f;
     private static readonly ColorRgba DangerRed = new(0.90f, 0.30f, 0.30f);
     private const float DangerIdleFillAlpha = 0.10f;
+    private const float CancelPillMaxW = 160f;   // well above the widest locale's "Cancel" (fil "Kanselahin"); a cap, not a size
 
     private float _histConfirmUntil;   // > now = armed
     private float _histClearedUntil;   // > now = show "Cleared" in the stats slot
@@ -38,17 +39,27 @@ public sealed partial class Plugin
         new RowElement(new HudElement[]
         {
             // Danger pill (28 tall, the composer pill shape): red outline + faint red wash at rest, solid red when armed.
-            BuildPill(new HudElement[]
+            // The bare Bubble sits DIRECTLY in this Column-stretched Row — NOT in BuildPill's Cell. Its label changes
+            // (idle ↔ armed, language), and in a natural Cell the parent-width cap can only shrink: "Click again to
+            // delete" pinned it narrow and "Clear saved whisper history" then spilled out of the box (.SendTarget.cs
+            // PillBubble). Here the cap is the full row, so it hugs any label and only wraps (grows taller, hence no
+            // NoWrap) if a translation is wider than the window.
+            PillBubble(new HudElement[]
                 {
                     new TextElement(() => _loc.T(HistConfirming() ? "chat.history.confirm" : "chat.history.clear"),
                         () => HistConfirming() ? new ColorRgba(1f, 1f, 1f) : EnsureContrast(DangerRed, _services.Theme.Colors.MenuBackground, 3f),
-                        Emphasis: true, NoWrap: true),
+                        Emphasis: true),
                 },
                 () => HistConfirming() ? DangerRed : DangerRed with { A = DangerIdleFillAlpha },
-                OnClearHistoryClick, 0f, () => DangerRed),
+                OnClearHistoryClick, outline: () => DangerRed),
+            // Its parent is the Conditional (sized from it), so it gets a static cap instead — same shrink-only trap.
             new ConditionalElement(HistConfirming,
-                BuildPill(() => _loc.T("chat.history.cancel"), () => _services.Theme.Colors.MenuText,
-                    () => _services.Theme.Colors.MenuText with { A = 0.08f }, CancelClearHistory)),
+                PillBubble(new HudElement[]
+                    {
+                        new TextElement(() => _loc.T("chat.history.cancel"), () => _services.Theme.Colors.MenuText,
+                            Emphasis: true, NoWrap: true),
+                    },
+                    () => _services.Theme.Colors.MenuText with { A = 0.08f }, CancelClearHistory, maxWidth: CancelPillMaxW)),
         }, Gap: 6f),
         // The stats get their OWN line. Beside the pill, the stats cell pushed the row's preferred width past the window,
         // and the layout then shrank EVERY child toward its min — the pill too, so its NoWrap label spilled across the
