@@ -10,11 +10,9 @@ namespace Stellar.ChatTools;
 /// here each cell is instead a <see cref="TextElement.RichEmoji"/> text holding the tag, which the framework draws via
 /// TMP with the game's default "emoji" sprite asset — the same path the chat bubbles use (Plugin.Bubbles.cs).
 ///
-/// Clicking a cell APPENDS the tag to <see cref="_inputText"/>; the composer's InputElement Get() binding re-seeds the
-/// field on the next poll (framework FieldBinding diffs on Get(), so the external change shows without fighting live
-/// typing). The picker stays open so several emoji can be inserted in a row. Each click also bumps
-/// <see cref="_composerFocusSeq"/> (the composer's InputElement.FocusRequest), so the field regains focus with the caret at
-/// the end — the click on the cell would otherwise leave the box unfocused. The send path (DoSend → IChat.Send) passes
+/// Clicking a cell INSERTS the tag at the composer's caret (replacing a selection) through the field's
+/// InputElement.InsertRequest; the framework refocuses the field with the caret right after the tag, and the new draft
+/// comes back through OnChange like typing. The picker stays open so several emoji can be inserted in a row. The send path (DoSend → IChat.Send) passes
 /// the text through unescaped, so the tag goes out exactly as if typed by hand.
 /// </summary>
 public sealed partial class Plugin
@@ -35,18 +33,18 @@ public sealed partial class Plugin
         return tags;
     }
 
-    // Append the tag to the draft. Refuse (rather than truncate) when it would overflow the 140 cap: SetInput's
-    // Substring would otherwise cut the tag in half and send a literal "<sprit" fragment. Focus goes back to the composer
-    // either way (bumped before the cap check), so a refused pick still leaves the user typing/deleting in the box.
+    // Insert the tag AT THE CARET (the composer's InputElement.InsertRequest: the framework remembers where the caret was
+    // before the click took focus, replaces a selection, never splits another tag, refocuses with the caret after the
+    // tag; the result comes back through OnChange → SetInput like typing). Refuse (rather than truncate) when it would
+    // overflow the 140 cap — counted as if appended, which is the worst case — since SetInput's Substring would otherwise
+    // cut a tag in half. A refused pick (or a locked box) still hands the keyboard back via FocusRequest.
     private void OnPickEmoji(int idx)
     {
         if (idx < 0 || idx >= EmojiCount) return;
-        _composerFocusSeq++;   // composer FocusRequest: hand the keyboard back to the field (caret at end) after the click
-        if (TrOutBusy()) return;   // .TranslateOut.cs — the box is locked while its draft is being translated
         var tag = EmojiTags[idx];
-        if (_inputText.Length + tag.Length > MaxMessageLength) return;
-        _inputText += tag;   // FieldBinding re-seeds the composer field from Get() on the next poll
-        NoteDraftEdited();   // an edit like typing: hides a translate status line
+        if (TrOutBusy() || _inputText.Length + tag.Length > MaxMessageLength) { _composerFocusSeq++; return; }
+        _emojiInsertText = tag;
+        _emojiInsertSeq++;
     }
 
     // The emoji tab's icon: a RichEmoji <sprite=1>, centred like the texture tabs (icon-only, no localized label).

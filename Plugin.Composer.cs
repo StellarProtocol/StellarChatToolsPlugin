@@ -23,9 +23,13 @@ public sealed partial class Plugin
     private int _sendTargetIndex;
 
     private string _inputText = string.Empty;
-    // Bumped per emoji-picker click; the composer InputElement.FocusRequest polls it and refocuses the field (caret at
-    // the end) on each change, so the user keeps typing after picking. Stickers send at once — they don't bump it.
+    // The composer InputElement.FocusRequest: bumped to refocus the field (caret at the end) — a refused emoji pick, a
+    // restored draft, a finished translation. Accepted emoji picks use InsertRequest below instead. Stickers don't bump it.
     private int _composerFocusSeq;
+    // Emoji picks (.Emoji.cs): bumped per pick with the tag to insert; the composer InputElement.InsertRequest polls the pair and
+    // inserts the tag AT THE CARET (replacing a selection), then refocuses with the caret after it.
+    private int _emojiInsertSeq;
+    private string _emojiInsertText = string.Empty;
 
     // Default the composer target to the opened read-tab's channel (overridable afterwards). In-memory only (not
     // persisted — only an explicit target-button click persists the default). Whisper mode lives ONLY in the Whisper
@@ -76,7 +80,7 @@ public sealed partial class Plugin
                 // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
                     { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
-                      Locked = TrOutBusy }, Weight: 1f),
+                      Locked = TrOutBusy, InsertRequest = () => (_emojiInsertSeq, _emojiInsertText) }, Weight: 1f),
                 new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
                 BuildSendPill(),     // .SendCooldown.cs — channel-coloured; greyed + "Ns" while empty / cooling down
             // Min-width row (any language): the input is pinned at 160 (typing never grows it); the chip's label, the
