@@ -246,6 +246,7 @@ public sealed partial class Plugin
         if (peer == 0) return;
         SetActiveTab(ChatTab.Whisper);   // .Tabs.cs
         SelectPeer(peer);
+        FocusComposer();   // .Composer.cs — a whisperer's name click / friend pick switched tabs: type to them next
     }
 
     private void CloseConversation(long peer)

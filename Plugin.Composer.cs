@@ -50,6 +50,16 @@ public sealed partial class Plugin
         }
     }
 
+    // Give the composer the keyboard (FocusRequest: focused on the next window refresh, caret at the END of the draft) after
+    // a user action that took it away — a tab change (.Tabs.cs SelectTabFromUser), opening a conversation (.Whisper.cs).
+    // Skipped in the Whisper tab with no conversation picked: there is nobody to type to (the placeholder says to pick
+    // one), so the keyboard is not grabbed; the pick itself then focuses.
+    private void FocusComposer()
+    {
+        if (_activeTab == ChatTab.Whisper && _selectedPeer == 0) return;
+        _composerFocusSeq++;
+    }
+
     private HudElement BuildComposer()
     {
         return new ColumnElement(new HudElement[]

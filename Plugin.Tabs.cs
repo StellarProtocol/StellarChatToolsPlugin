@@ -123,8 +123,13 @@ public sealed partial class Plugin
     }
 
     // A tab chosen by the USER — a tab-bar click or the previous / next tab hotkeys (.TabHotkeys.cs) share this one path.
-    // Programmatic switches (the logout reset, a target-menu pick) call SetActiveTab directly.
-    private void SelectTabFromUser(ChatTab tab) => SetActiveTab(tab);
+    // Programmatic switches (the logout reset, a target-menu pick) call SetActiveTab directly. The tab click took the
+    // keyboard away from the composer (and a hotkey user wants to type next), so hand it back.
+    private void SelectTabFromUser(ChatTab tab)
+    {
+        SetActiveTab(tab);
+        FocusComposer();   // .Composer.cs
+    }
 
     // ── Tab colours ───────────────────────────────────────────────────────────────────────────────────────────────
     // A tab's base colour = its channel's theme slot (the SAME IColorSlot the message rows use, read live so a Theme
