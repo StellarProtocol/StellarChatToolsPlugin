@@ -213,20 +213,28 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickMsgMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
-        try { FlushAutoReplyText(); } catch { /* swallow */ }   // .Config.cs — a typed reply not yet saved
-        DisposeWhisper();
-        DisposeWhisperHistory();   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
-        DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
-        DisposeLanguage();
-        DisposeColorSlots();   // .Language.cs
-        _window.Remove();
-        _favMenuWindow?.Remove();
-        _targetMenuWindow?.Remove();
-        _convMenuWindow?.Remove();
-        _friendPickerWindow?.Remove();
-        _settingsWindow?.Remove();
-        _msgMenuWindow?.Remove();
-        _trOutMenuWindow?.Remove();
-        DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
+        // Every remaining step in its own guard: one throwing (a half-torn-down service, a destroyed window) must not
+        // skip the rest — above all the history flush and the GPU texture release.
+        Safe(FlushAutoReplyText);      // .Config.cs — a typed reply not yet saved
+        Safe(DisposeWhisper);
+        Safe(DisposeWhisperHistory);   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
+        Safe(DisposeTranslate);        // .Translate.Net.cs — cancel in-flight requests; late results are dropped
+        Safe(DisposeLanguage);
+        Safe(DisposeColorSlots);       // .Language.cs
+        Safe(() => _window.Remove());
+        Safe(() => _favMenuWindow?.Remove());
+        Safe(() => _targetMenuWindow?.Remove());
+        Safe(() => _convMenuWindow?.Remove());
+        Safe(() => _friendPickerWindow?.Remove());
+        Safe(() => _settingsWindow?.Remove());
+        Safe(() => _msgMenuWindow?.Remove());
+        Safe(() => _trOutMenuWindow?.Remove());
+        Safe(DisposeAvatars);          // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
+    }
+
+    private void Safe(Action step)
+    {
+        try { step(); }
+        catch (Exception ex) { try { _services.Log.Warning($"[ChatTools] dispose step failed: {ex.GetType().Name}: {ex.Message}"); } catch { } }
     }
 }
