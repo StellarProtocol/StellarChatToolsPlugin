@@ -80,7 +80,7 @@ public sealed partial class Plugin
     private readonly Queue<(long Id, byte[] Bytes, bool FromDisk)> _decodeQueue = new();
     private byte[]? _defaultBytes;   // the default face's bytes awaiting decode — drained before any player avatar
     private bool _avatarsDisposed;   // late background completions after Dispose are dropped
-    private bool _loggedAvatarFormat; // one-shot log that LoadImage handed back a no-alpha format (see BakeRoundedAvatar)
+    private bool _loggedAvatarFormat; // one-shot bake diagnostic: decoded/displayed format + sampled corner alpha
 
     // Data-store names (IPluginDataStore: one subdir + file, no rooted/backslash/.. parts). Pure string ops → safe
     // to build from the download thread too. The store roots these under stellar/plugindata/stellar.chattools.data/.
@@ -365,17 +365,17 @@ public sealed partial class Plugin
     private Texture2D BakeRoundedAvatar(Texture2D src)
     {
         int w = src.width, h = src.height;
-        var px = src.GetPixels32();
+        // ⚠️ MUST be an explicit managed Color32[]: the interop GetPixels32 returns Il2CppStructArray<Color32>, and
+        // passing THAT to RoundCorner(Color32[]) runs Il2CppArrayBase<T>'s implicit T[] operator — a fresh COPY per
+        // call. The corner alpha was written into four throwaway copies and SetPixels32 uploaded the untouched
+        // original → square corners whatever the format. Convert once here; SetPixels32(px) copies it back in.
+        Color32[] px = src.GetPixels32();
+        var srcFormat = src.format;
         var dst = src;
-        if (src.format != TextureFormat.RGBA32)
-        {
-            if (!_loggedAvatarFormat)
-            {
-                _loggedAvatarFormat = true;
-                _services.Log.Info($"[ChatTools] avatar PNG decoded as {src.format} (no alpha) — baking corners into an RGBA32 copy");
-            }
+        // Bake into an explicit RGBA32 texture whenever LoadImage re-formatted it (RGB24 has no alpha; ARGB32 does,
+        // but a uniform RGBA32 keeps the bake + diagnostic one path).
+        if (srcFormat != TextureFormat.RGBA32)
             dst = new Texture2D(w, h, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
-        }
         dst.filterMode = FilterMode.Bilinear;
         dst.wrapMode = TextureWrapMode.Clamp;
 
@@ -391,6 +391,16 @@ public sealed partial class Plugin
             RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
         }
         dst.SetPixels32(px);
+        if (!_loggedAvatarFormat)
+        {
+            // One-shot proof the bake reached the texture: read the corner back from the GPU-bound texture itself
+            // (before Apply drops the CPU copy). Expect a=0 at (0,0) for any rounded avatar.
+            _loggedAvatarFormat = true;
+            byte cornerA = (byte)(dst.GetPixel(0, 0).a * 255f);
+            byte centreA = (byte)(dst.GetPixel(w / 2, h / 2).a * 255f);
+            _services.Log.Info($"[ChatTools] avatar bake: decoded {srcFormat} → displayed {dst.format} {w}x{h}, " +
+                               $"corner r={AvatarCornerFraction * Mathf.Min(w, h):0.#}px, alpha corner(0,0)={cornerA} centre={centreA}");
+        }
         dst.Apply(false, true);   // upload; no mipmaps (mip-free), drop the CPU copy
         return dst;
     }
