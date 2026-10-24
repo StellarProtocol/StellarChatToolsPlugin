@@ -34,7 +34,10 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private const float AvatarSize     = 40f;    // ≈ the bubble's name + one-line-text height (fixed px — eyeball-tuned)
-    private const float AvatarCorner   = 8f;     // rounded-SQUARE mask (NOT AvatarSize/2, which is a full circle)
+    // Avatar corner radius as a FRACTION of the displayed size — the single knob for every avatar (chat 40px → 10,
+    // whisper list/header 32px → 8, friend picker 28px → 7). All of them show the SAME baked texture, so a size-relative
+    // radius is the only way one bake reads identically at each size. Rounded SQUARE (0.5 would be a full circle).
+    private const float AvatarCornerFraction = 0.25f;
     private const float RowGap         = 10f;    // horizontal spacing between row items — notably the avatar↔bubble gutter
     private const float TimeColWidth   = 46f;
     // Hard width cap on a bubble (canvas px). Short messages hug; past the cap a long message wraps and the
@@ -86,7 +89,7 @@ public sealed partial class Plugin
     private HudElement BuildBubbleRow(int i, bool self)
     {
         // Real player photo (download + disk/LRU cached in Plugin.Avatars.cs). The rounded-SQUARE corners are BAKED
-        // into the texture's alpha at decode time (RoundCornersInPlace, driven by AvatarCorner) — so CornerRadius=0
+        // into the texture's alpha at decode time (BakeRoundedAvatar, driven by AvatarCornerFraction) — so CornerRadius=0
         // here (no per-row stencil Mask, which would break UI batching + add stencil draw calls every drawn frame).
         // Everyone resolves to the shared default face until (and unless) their real photo loads.
         var avatar = new GameTextureElement(() => AvatarTextureFor(SenderCharId(i, self)), (int)AvatarSize, (int)AvatarSize)

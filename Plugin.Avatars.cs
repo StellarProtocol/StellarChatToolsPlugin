@@ -80,6 +80,7 @@ public sealed partial class Plugin
     private readonly Queue<(long Id, byte[] Bytes, bool FromDisk)> _decodeQueue = new();
     private byte[]? _defaultBytes;   // the default face's bytes awaiting decode — drained before any player avatar
     private bool _avatarsDisposed;   // late background completions after Dispose are dropped
+    private bool _loggedAvatarFormat; // one-shot log that LoadImage handed back a no-alpha format (see BakeRoundedAvatar)
 
     // Data-store names (IPluginDataStore: one subdir + file, no rooted/backslash/.. parts). Pure string ops → safe
     // to build from the download thread too. The store roots these under stellar/plugindata/stellar.chattools.data/.
@@ -330,51 +331,68 @@ public sealed partial class Plugin
 
     // ---- Helpers ---------------------------------------------------------------------------------------------
 
-    // Decode a PNG into a mipmap-free RGBA32 texture (resizes to the PNG on LoadImage). Null on any failure.
-    // Every avatar (per-player AND the shared default, which also resolves through here) is decoded via this one
-    // method, so the rounded-corner bake lives here once — covering all paths without double-baking.
-    private static Texture2D? DecodePng(byte[]? bytes)
+    // Decode a PNG and return a mipmap-free, rounded-corner RGBA32 texture. Null on any failure. Every avatar
+    // (per-player AND the shared default, which also resolves through here) is decoded via this one method, so the
+    // rounded-corner bake lives here once — covering all paths (chat rows, whisper list + header, friend picker,
+    // store hit or fresh download) without double-baking.
+    private Texture2D? DecodePng(byte[]? bytes)
     {
         if (bytes == null || bytes.Length == 0) return null;
-        Texture2D? tex = null;
+        Texture2D? src = null;
         try
         {
-            tex = new Texture2D(2, 2, TextureFormat.RGBA32, false)
-            { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
-            if (ImageConversion.LoadImage(tex, bytes))   // LoadImage uploads + leaves the texture readable
-            {
-                RoundCornersInPlace(tex);   // bake rounded-square corners into alpha → no per-row stencil Mask needed
-                return tex;
-            }
-            SafeDestroy(tex);
-            return null;
+            src = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+            if (!ImageConversion.LoadImage(src, bytes)) { SafeDestroy(src); return null; }   // stays readable
+            var tex = BakeRoundedAvatar(src);
+            if (!ReferenceEquals(tex, src)) SafeDestroy(src);
+            return tex;
         }
-        catch { if (tex != null) SafeDestroy(tex); return null; }
+        catch { if (src != null) SafeDestroy(src); return null; }
     }
 
-    // Bake rounded-SQUARE corners into the texture's ALPHA so the chat bubble avatar needs NO per-item stencil Mask.
-    // Every live uGUI Mask is a UI-batch break + extra stencil draw calls EVERY drawn frame (the at-rest residual
-    // FPS cost); a baked alpha has none — the rounding is paid once here, on a tiny texture, at decode time. rPx
-    // scales the on-screen corner radius (AvatarCorner px at an AvatarSize-px display) into THIS texture's pixel
-    // space, so the curve matches the old stencil at any source PNG resolution. A ~1px coverage ramp across the arc
-    // keeps the edge anti-aliased (no hard stair-step), mirroring the stencil mask's smoothing. Texture stays RGBA32.
-    private static void RoundCornersInPlace(Texture2D tex)
+    // Bake rounded-SQUARE corners into the ALPHA so no avatar needs a per-item stencil Mask (every live uGUI Mask is
+    // a UI-batch break + extra stencil draw calls EVERY drawn frame — the at-rest FPS cost); the rounding is paid
+    // once here, at decode time, inside the budgeted per-tick decode queue.
+    //
+    // ⚠️ LoadImage RE-FORMATS the texture to match the PNG: the RGBA32 we create is only a request. An RGB PNG (colour
+    // type 2 — ~93% of the server's avatar photos, 300×300 RGB) comes back RGB24, which has NO alpha channel, so a
+    // SetPixels32 bake on it is silently discarded and the corners stay square. Hence: if LoadImage didn't hand back
+    // RGBA32, copy the pixels (GetPixels32 reports a=255 for RGB24) into an explicit RGBA32 texture and bake THAT.
+    //
+    // The radius is AvatarCornerFraction of the texture's short side, so it lands at the same fraction of whatever
+    // size the element draws it at. A ~1px coverage ramp across the arc keeps the edge anti-aliased. The upload marks
+    // the texture non-readable — nothing reads it back, and it frees the CPU-side copy of each LRU entry.
+    private Texture2D BakeRoundedAvatar(Texture2D src)
     {
-        int w = tex.width, h = tex.height;
-        if (w <= 2 || h <= 2) return;
-        float rPx = AvatarCorner * (Mathf.Min(w, h) / AvatarSize);
-        if (rPx < 0.5f) return;                               // radius rounds to nothing at this size — leave it square
-        int r = Mathf.Min(Mathf.CeilToInt(rPx), Mathf.Min(w, h) / 2);   // corner box side (clamped so boxes can't overlap)
+        int w = src.width, h = src.height;
+        var px = src.GetPixels32();
+        var dst = src;
+        if (src.format != TextureFormat.RGBA32)
+        {
+            if (!_loggedAvatarFormat)
+            {
+                _loggedAvatarFormat = true;
+                _services.Log.Info($"[ChatTools] avatar PNG decoded as {src.format} (no alpha) — baking corners into an RGBA32 copy");
+            }
+            dst = new Texture2D(w, h, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+        }
+        dst.filterMode = FilterMode.Bilinear;
+        dst.wrapMode = TextureWrapMode.Clamp;
 
-        var px = tex.GetPixels32();
-        // Each corner's quarter-circle arc centre is inset rPx from the two edges it touches; only the r×r corner
-        // boxes are visited (everything else keeps full alpha). (x,y) origin is bottom-left (GetPixels32 row order).
-        RoundCorner(px, w, 0,     0,     rPx,           rPx,           rPx, r);   // bottom-left
-        RoundCorner(px, w, w - r, 0,     (w - 1) - rPx, rPx,           rPx, r);   // bottom-right
-        RoundCorner(px, w, 0,     h - r, rPx,           (h - 1) - rPx, rPx, r);   // top-left
-        RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
-        tex.SetPixels32(px);
-        tex.Apply(false);   // re-upload; no mipmap regen (texture is mip-free)
+        float rPx = AvatarCornerFraction * Mathf.Min(w, h);
+        if (w > 2 && h > 2 && rPx >= 0.5f)
+        {
+            int r = Mathf.Min(Mathf.CeilToInt(rPx), Mathf.Min(w, h) / 2);   // corner box side (clamped so boxes can't overlap)
+            // Each corner's quarter-circle arc centre is inset rPx from the two edges it touches; only the r×r corner
+            // boxes are visited (everything else keeps its alpha). (x,y) origin is bottom-left (GetPixels32 row order).
+            RoundCorner(px, w, 0,     0,     rPx,           rPx,           rPx, r);   // bottom-left
+            RoundCorner(px, w, w - r, 0,     (w - 1) - rPx, rPx,           rPx, r);   // bottom-right
+            RoundCorner(px, w, 0,     h - r, rPx,           (h - 1) - rPx, rPx, r);   // top-left
+            RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
+        }
+        dst.SetPixels32(px);
+        dst.Apply(false, true);   // upload; no mipmaps (mip-free), drop the CPU copy
+        return dst;
     }
 
     // Multiply alpha by the quarter-circle coverage over one r×r corner box whose arc centre is (cx,cy), radius rad.
