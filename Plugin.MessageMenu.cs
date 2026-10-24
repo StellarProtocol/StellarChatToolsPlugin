@@ -95,8 +95,10 @@ public sealed partial class Plugin
         _msgMenuSticker = m.StickerId != 0;
         // ORIGINAL text, never the translation shown in a translated bubble (m.Text is the wire text; the translation
         // lives in the .Translate.cs cache). A notice copies its label + text, as the line reads, minus the time.
+        // Copy the human-readable text the row shows: wire text as sanitized for display (ChatMarkup — <sprite=N> kept, it
+        // round-trips into chat as the emoji), a client notice minus the game's colour tags.
         var raw = m.Channel == ChatChannel.System && !string.IsNullOrEmpty(m.SystemLabel) ? m.SystemLabel + " " + m.Text : m.Text;
-        _msgMenuText = _msgMenuSticker ? "" : StripRichTags(raw ?? "");
+        _msgMenuText = _msgMenuSticker ? "" : StripRichTags(m.SystemLabel != null ? raw ?? "" : ChatMarkup.SanitizeWire(raw));
         _msgCopiedUntil = double.NegativeInfinity;
         _msgMenuRect = CursorPopupRect(MsgMenuW, MsgMenuHeight());   // .WhisperList.cs
         _msgMenuPlaced = false;

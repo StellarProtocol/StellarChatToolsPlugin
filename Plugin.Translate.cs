@@ -143,12 +143,16 @@ public sealed partial class Plugin
     }
 
     // Body text of the translate branch: the translation while shown (unless it's already in the target language).
+    // Both are untrusted in TMP: the original is wire text, and a Google result can contain '<' too (ChatMarkup).
     private string TrBodyText(int slot)
     {
         if (!TryMsg(slot, out var m)) return "";
         var e = TrEntryFor(slot);
-        return TrIsTranslatedShown(e) && e!.Result is { Same: false } r ? r.Text : m.Text;
+        var text = TrIsTranslatedShown(e) && e!.Result is { Same: false } r ? r.Text : m.Text;
+        return SafeCached(_trBodyRaw, _trBodySafe, slot, text, trusted: false);   // .Log.cs — per-slot cache
     }
+
+    private readonly string?[] _trBodyRaw = new string?[LogPoolSize], _trBodySafe = new string?[LogPoolSize];
 
     // Dim the original while it is being translated; otherwise the normal body colour.
     private ColorRgba? TrBodyColor(int slot)
@@ -246,10 +250,12 @@ public sealed partial class Plugin
         }
         e.Target = TranslateTarget();
         e.Tag = null;
-        if (TryCachedTranslation(key, m.Text, e.Target, out var hit)) { e.Result = hit; e.Phase = TrPhase.Done; e.Showing = true; e.Rev++; return; }
+        // Translate what the bubble SHOWS (ChatMarkup): a player's <size>/<color> junk never goes to Google.
+        var source = ChatMarkup.SanitizeWire(m.Text);
+        if (TryCachedTranslation(key, source, e.Target, out var hit)) { e.Result = hit; e.Phase = TrPhase.Done; e.Showing = true; e.Rev++; return; }
         e.Phase = TrPhase.Pending;
         e.Rev++;
-        EnqueueTranslation(key, m.Text, e.Target);   // .Translate.Net.cs
+        EnqueueTranslation(key, source, e.Target);   // .Translate.Net.cs
     }
 
     // A finished request (or a queued duplicate answered from the cache). Only a row still waiting for THIS target

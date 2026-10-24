@@ -34,7 +34,10 @@ public sealed partial class Plugin
         public DateTime LatestUtc;          // newest message (live, history or the server's latest) — drives the preview
         public DateTime TouchedUtc;         // when we started it from the friend picker (sorts it up before any message)
         public DateTime Activity => LatestUtc > TouchedUtc ? LatestUtc : TouchedUtc;
-        public string LatestText = "";
+        // The list preview is a RichEmoji (TMP) text, so the wire text is sanitized ONCE here, on assignment (ChatMarkup) —
+        // from a live whisper, the server's conversation list or the saved index alike.
+        private string _latestText = "";
+        public string LatestText { get => _latestText; set => _latestText = ChatMarkup.SanitizeWire(value); }
         public int LatestKind;              // 0 text, 3 sticker, 5 voice, 6 link (the game's ChitChatMsgType)
         public bool HistoryRequested;       // RequestPrivateHistory / CreatePrivateChat already asked this session
         public bool SavedOnly;              // listed only from the on-disk history (.WhisperHistory.cs), no live/server data yet

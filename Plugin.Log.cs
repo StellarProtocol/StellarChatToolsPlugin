@@ -219,7 +219,23 @@ public sealed partial class Plugin
     private string LogTime(int slot)
         => TryMsg(slot, out var m) ? m.Timestamp.ToLocalTime().ToString("HH:mm") : "";
 
-    private string LogText(int slot) => TryMsg(slot, out var m) ? m.Text : "";
+    // Bubble body, TMP-safe (ChatMarkup: only <sprite=N> survives from the wire). Polled every refresh, so the sanitized
+    // string is cached per pool slot and recomputed only when the slot shows a different text (same-instance check).
+    private string LogText(int slot) => TryMsg(slot, out var m) ? SafeCached(_bodyRaw, _bodySafe, slot, m.Text, m.SystemLabel != null) : "";
+
+    private readonly string?[] _bodyRaw = new string?[LogPoolSize], _bodySafe = new string?[LogPoolSize];
+
+    // Per-slot sanitize cache shared by the bubble body and the translate body (.Translate.cs). trusted = a client
+    // notice, whose game colour tags are intended (ChatMarkup.SafeBody).
+    private static string SafeCached(string?[] raw, string?[] safe, int slot, string? text, bool trusted)
+    {
+        text ??= "";
+        if (trusted) return text;
+        if (slot < 0 || slot >= raw.Length) return ChatMarkup.SanitizeWire(text);
+        if (ReferenceEquals(raw[slot], text) && safe[slot] is { } hit) return hit;
+        raw[slot] = text;
+        return safe[slot] = ChatMarkup.SanitizeWire(text);
+    }
 
     // Sender name coloured by channel; System uses muted (no dedicated bright colour on a notice line).
     private ColorRgba? LogSenderColor(int slot)

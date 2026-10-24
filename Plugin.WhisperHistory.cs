@@ -279,7 +279,7 @@ public sealed partial class Plugin
         _histStatsRev++;
         if (changed) { sp.Dirty = true; _histIndexDirty = true; MarkHistDirty(); }
         for (int i = Math.Max(0, list.Count - PrewarmSavedRows); i < list.Count; i++)
-            if (list[i].StickerId == 0 && list[i].Text.Length > 0) _services.Windows.PrewarmText(list[i].Text);
+            if (list[i].StickerId == 0 && list[i].Text.Length > 0) _services.Windows.PrewarmText(ChatMarkup.SanitizeWire(list[i].Text));
         if (peer == _selectedPeer) _logDirty = true;
     }
 

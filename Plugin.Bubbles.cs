@@ -125,10 +125,10 @@ public sealed partial class Plugin
         }, Gap: 1f))
         { MaxWidth = BubbleMaxWidth, OutlineColorFn = outline };
 
-        // RichEmoji: LogText returns m.Text verbatim, keeping the inbound <sprite=N> tags the game leaves in the
-        // message; the framework hosts this body in TextMeshPro with the game's own chat sprite asset so those draw
-        // as real emoji images (literal tags until the asset resolves / off-game). Body only — the sender name
-        // carries no sprite tags, so it stays a plain Text.
+        // RichEmoji: LogText keeps the inbound <sprite=N> tags the game leaves in the message (and strips every other
+        // tag a player could type — ChatMarkup); the framework hosts this body in TextMeshPro with the game's own chat
+        // sprite asset so those draw as real emoji images (literal tags until the asset resolves / off-game). Body
+        // only — the sender name carries no sprite tags, so it stays a plain Text.
         HudElement textBubble = MakeBubble(new TextElement(() => LogText(i), () => LogMsgColor(i)) { RichEmoji = true });
         // Others' text can be translated (.Translate.cs): the translate state is ANOTHER whole-bubble branch (same rule as
         // sticker-vs-text below — never a Cond inside the measured child), so an untranslated row is byte-for-byte the

@@ -248,9 +248,7 @@ public sealed partial class Plugin
             case 5: return _loc.T("chat.whisper.preview.voice");
             case 6: return _loc.T("chat.whisper.preview.link");
         }
-        var t = c.LatestText;
-        if (t.IndexOf('\n') >= 0) c.LatestText = t = t.Replace('\n', ' ');   // flatten once, in place
-        return t;
+        return c.LatestText;   // already TMP-safe + flattened (line breaks → spaces) by its setter (.Whisper.cs)
     }
 
     // ── Right-click menu ────────────────────────────────────────────────────────────────────────────────────────────
