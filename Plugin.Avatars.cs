@@ -74,7 +74,9 @@ public sealed partial class Plugin
     // Main-thread decode budget (fixed — no adaptive tuning): at most this many avatar decodes per framework tick, and
     // none started once this many ms of the tick have gone to them. One decode + corner bake is ~1-24 ms, so in
     // practice the count cap wins: one avatar per tick, ~a frame each, instead of every uncached sender in one apply.
-    private const int AvatarDecodesPerTick = 1;
+    // (Since the worker-side prepare, .Avatars.Prepare.cs, a decode is a ≤128² upload — well under 1 ms — so a few per
+    // tick; the ms budget still stops new ones behind a slow main-thread LoadImage fallback.)
+    private const int AvatarDecodesPerTick = 4;
     private const double AvatarDecodeBudgetMs = 4.0;
 
     // Bytes waiting to become textures (main thread only). Src picks the failure path: a corrupt STORE file is deleted +
@@ -82,8 +84,9 @@ public sealed partial class Plugin
     // background REFRESH is dropped (the old photo stays). The charId stays in _inFlight while queued (not for a refresh,
     // whose old photo is already showing), so the poll keeps returning the placeholder and never issues a second request.
     private enum AvatarSrc { Disk, Download, Refresh }
-    private readonly Queue<(long Id, byte[] Bytes, AvatarSrc Src)> _decodeQueue = new();
+    private readonly Queue<(long Id, byte[] Bytes, AvatarSrc Src, AvatarPixels? Px)> _decodeQueue = new();
     private byte[]? _defaultBytes;   // the default face's bytes awaiting decode — drained before any player avatar
+    private AvatarPixels? _defaultPx; // ...and its worker-prepared pixels (null → LoadImage fallback)
     private bool _avatarsDisposed;   // late background completions after Dispose are dropped
     private bool _loggedAvatarFormat; // one-shot bake diagnostic: decoded/displayed format + sampled corner alpha
 
@@ -144,18 +147,22 @@ public sealed partial class Plugin
         {
             byte[]? bytes = null;
             try { bytes = _services.Data.Read(name); } catch { /* treated as a miss → resolve */ }
-            _services.Framework.Post(() => OnStoreRead(charId, bytes));
+            // Decode + shrink + round HERE, off the main thread (.Avatars.Prepare.cs). An oversized cached original is
+            // replaced by its small copy once, so later sessions read + decode a ≤128² file.
+            var px = PrepareAvatar(bytes, out var small);
+            if (small != null) { try { _services.Data.Write(name, small); } catch { /* keep the original */ } }
+            _services.Framework.Post(() => OnStoreRead(charId, bytes, px));
         });
     }
 
     // Main thread (via Post). Hit → queue the decode (stays in-flight until it lands). Miss → hand over to the RPC
     // resolve, which takes over the in-flight guard itself (BeginResolve refuses an id that is already in flight).
-    private void OnStoreRead(long charId, byte[]? bytes)
+    private void OnStoreRead(long charId, byte[]? bytes, AvatarPixels? px)
     {
         if (_avatarsDisposed) return;
         if (bytes != null)
         {
-            _decodeQueue.Enqueue((charId, bytes, AvatarSrc.Disk));
+            _decodeQueue.Enqueue((charId, bytes, AvatarSrc.Disk, px));
             MaybeRefreshAvatar(charId);   // .Avatars.Cache.cs — older than a day → re-fetch in the background
             return;
         }
@@ -175,9 +182,11 @@ public sealed partial class Plugin
         {
             var b = _defaultBytes;
             _defaultBytes = null;
+            var dpx = _defaultPx;
+            _defaultPx = null;
             if (_defaultAvatar == null)
             {
-                var tex = DecodePng(b);
+                var tex = MakeAvatarTexture(b, dpx);
                 if (tex != null) _defaultAvatar = tex;
                 // Undecodable (a corrupt store copy, or a bad download): drop the store copy and let the next poll's
                 // EnsureDefaultAvatar re-fetch it — the old sync path likewise fell through to a download. Once only, so
@@ -189,9 +198,9 @@ public sealed partial class Plugin
         while (done < AvatarDecodesPerTick && _decodeQueue.Count > 0
                && (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency < AvatarDecodeBudgetMs)
         {
-            var (id, bytes, src) = _decodeQueue.Dequeue();
+            var (id, bytes, src, px) = _decodeQueue.Dequeue();
             var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-            DecodeQueued(id, bytes, src);
+            DecodeQueued(id, bytes, src, px);
             NoteAvatarDecodeCost(t0);
             done++;
         }
@@ -209,17 +218,17 @@ public sealed partial class Plugin
         _avatarDecodes++;
         if (ms < 2.0 || ms < _avatarDecodeMaxMs * 1.5) { if (ms > _avatarDecodeMaxMs) _avatarDecodeMaxMs = ms; return; }
         _avatarDecodeMaxMs = ms;
-        _services.Log.Info($"[ChatTools] avatar decode: slowest so far {ms:0.0} ms (decode #{_avatarDecodes})");
+        _services.Log.Info($"[ChatTools] avatar decode: slowest so far {ms:0.0} ms (decode #{_avatarDecodes}, source {_lastDecodeDesc.W}x{_lastDecodeDesc.H}, {(_lastDecodeDesc.Fallback ? "main-thread LoadImage fallback" : "worker-prepared upload")})");
     }
 
     // One budgeted decode. Success → LRU (a refresh REPLACES the photo on show — LruInsert frees the old texture) +
     // clear in-flight. A corrupt STORE file is deleted so a fresh download can replace it, then re-resolved; a corrupt
     // DOWNLOAD is a failed load (default face, retried with backoff — never spins); a corrupt REFRESH keeps the old photo.
-    private void DecodeQueued(long charId, byte[] bytes, AvatarSrc src)
+    private void DecodeQueued(long charId, byte[] bytes, AvatarSrc src, AvatarPixels? px)
     {
         try
         {
-            var tex = DecodePng(bytes);
+            var tex = MakeAvatarTexture(bytes, px);   // .Avatars.Prepare.cs — worker pixels, else LoadImage
             if (src == AvatarSrc.Refresh) { if (tex != null) LruInsert(charId, tex); return; }
             _inFlight.Remove(charId);
             if (tex != null) { LruInsert(charId, tex); if (src == AvatarSrc.Disk) NoteAvatarUsed(charId); return; }
@@ -284,14 +293,17 @@ public sealed partial class Plugin
                     if (!refresh) FailAvatar(charId);
                     return;
                 }
-                _services.Data.Write(AvatarStoreName(charId), bytes);   // persist for next session (bg thread; store never throws)
+                // Decode + shrink + round on this worker (.Avatars.Prepare.cs); persist the SMALL copy when the photo
+                // was oversized, so the next session's decode is a ≤128² file.
+                var px = PrepareAvatar(bytes, out var small);
+                _services.Data.Write(AvatarStoreName(charId), small ?? bytes);   // persist for next session (bg thread; store never throws)
                 // Texture2D creation is main-thread-only → hop back and join the BUDGETED decode queue (a burst of
                 // downloads landing in one tick must not decode all at once either). Stays in-flight until decoded.
                 _services.Framework.Post(() =>
                 {
                     if (_avatarsDisposed) return;
                     NoteAvatarFetched(charId);   // .Avatars.Cache.cs — fresh for a day
-                    _decodeQueue.Enqueue((charId, bytes, refresh ? AvatarSrc.Refresh : AvatarSrc.Download));
+                    _decodeQueue.Enqueue((charId, bytes, refresh ? AvatarSrc.Refresh : AvatarSrc.Download, px));
                 });
             }
             catch (Exception ex)
@@ -332,7 +344,8 @@ public sealed partial class Plugin
                     }
                     _services.Data.Write(DefaultStoreName, bytes);   // persist for next session (bg thread; store never throws)
                 }
-                _services.Framework.Post(() => { if (!_avatarsDisposed && _defaultAvatar == null) _defaultBytes = bytes; });
+                var px = PrepareAvatar(bytes, out _);   // worker-side decode (.Avatars.Prepare.cs); the default stays as stored
+                _services.Framework.Post(() => { if (!_avatarsDisposed && _defaultAvatar == null) { _defaultBytes = bytes; _defaultPx = px; } });
             }
             catch (Exception ex) { _services.Log.Warning($"[ChatTools] default avatar: download failed: {ex.Message}"); }
         });

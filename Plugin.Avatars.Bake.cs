@@ -21,7 +21,12 @@ public sealed partial class Plugin
         try
         {
             src = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
-            if (!ImageConversion.LoadImage(src, bytes)) { SafeDestroy(src); return null; }   // stays readable
+            // [Hitch] sub-buckets (diagnostics only): native decode / pixel bake / GPU upload. Only the FALLBACK path
+            // runs here now — the worker-prepared one is ct:av.upload (.Avatars.Prepare.cs).
+            var hT = Stellar.Abstractions.Diagnostics.HitchProbe.Begin();
+            bool ok = ImageConversion.LoadImage(src, bytes);   // stays readable
+            Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:av.loadImage", hT);
+            if (!ok) { SafeDestroy(src); return null; }
             var tex = BakeRoundedAvatar(src);
             if (!ReferenceEquals(tex, src)) SafeDestroy(src);
             return tex;
@@ -52,6 +57,7 @@ public sealed partial class Plugin
         //   • The span is a view of the native buffer, so RoundCorner's writes land in `il2px` itself and
         //     SetPixels32(il2px) uploads them with no copy back. (The older bug — four throwaway T[] copies, square
         //     corners — came from converting per RoundCorner call; a single in-place view can't repeat it.)
+        var hT = Stellar.Abstractions.Diagnostics.HitchProbe.Begin();
         Il2CppStructArray<Color32> il2px = src.GetPixels32();
         Span<Color32> px = il2px.AsSpan();   // valid while il2px is alive (held in this frame)
         var srcFormat = src.format;
@@ -85,7 +91,9 @@ public sealed partial class Plugin
             _services.Log.Info($"[ChatTools] avatar bake: decoded {srcFormat} → displayed {dst.format} {w}x{h}, " +
                                $"corner r={AvatarCornerFraction * Mathf.Min(w, h):0.#}px, alpha corner(0,0)={cornerA} centre={centreA}");
         }
+        hT = Stellar.Abstractions.Diagnostics.HitchProbe.Lap("ct:av.bake", hT);
         dst.Apply(false, true);   // upload; no mipmaps (mip-free), drop the CPU copy
+        Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:av.apply", hT);
         return dst;
     }
 
