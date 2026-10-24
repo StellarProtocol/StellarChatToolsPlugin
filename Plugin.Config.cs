@@ -15,6 +15,7 @@ public sealed partial class Plugin
     private const string CfgAutoReplyOn    = "autoReply.enabled";
     private const string CfgAutoReplyText  = "autoReply.text";
     private const string CfgSendTarget     = "sendTarget";
+    private const string CfgKeepWhispers   = "whisperHistory.keep";
 
     private void LoadConfig()
     {
@@ -30,6 +31,7 @@ public sealed partial class Plugin
         if (string.IsNullOrEmpty(_autoReplyText)) _autoReplyText = _loc.T("chat.autoReply.default");
 
         _sendTargetIndex = SavedSendTarget();
+        _keepWhisperHistory = _cfg.Get(CfgKeepWhispers, true);   // .WhisperHistory.cs — on unless turned off
         LoadFavorites();   // .Favorites.cs — ordered favorite sticker ids ("stickerFavorites")
         LoadTranslateConfig();   // .Translate.cs — target language ("translate.target") + hover button ("translate.hoverButton")
         LoadTranslateOutConfig();   // .TranslateOut.Menu.cs — recent outgoing languages ("translate.outRecent")
@@ -62,6 +64,12 @@ public sealed partial class Plugin
     private void SaveAutoReplyText()
     {
         _cfg.Set(CfgAutoReplyText, _autoReplyText ?? "");
+        _cfg.Save();
+    }
+
+    private void SaveWhisperHistoryConfig()
+    {
+        _cfg.Set(CfgKeepWhispers, _keepWhisperHistory);
         _cfg.Save();
     }
 

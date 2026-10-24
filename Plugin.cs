@@ -88,7 +88,8 @@ public sealed partial class Plugin : IStellarPlugin
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕
                 // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs) or the settings window.
-                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings(); _window!.SetVisible(false); }),
+                // Also write any pending whisper history now (.WhisperHistory.cs) instead of waiting out its 2 s batch.
+                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings(); FlushHistory(); _window!.SetVisible(false); }),
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -118,6 +119,8 @@ public sealed partial class Plugin : IStellarPlugin
         _convMenuWindow = RegisterConvMenuWindow();
         _friendPickerWindow = RegisterFriendPickerWindow();
         _services.Framework.Update += TickWhisper;
+        // On-disk whisper history (.WhisperHistory.cs): per-character folder key, 2 s batched writes, logout flush.
+        _services.Framework.Update += TickWhisperHistory;
         // Settings (.Settings.cs): its own window, toggled by the title ⚙; centred over the chat on each open and
         // closed with it.
         _settingsWindow = RegisterSettingsWindow();
@@ -138,10 +141,12 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickWhisperHistory; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickMsgMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
         DisposeWhisper();
+        DisposeWhisperHistory();   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
         DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
         _sayColor.Dispose();
         _worldColor.Dispose();

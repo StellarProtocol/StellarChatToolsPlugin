@@ -11,7 +11,8 @@ namespace Stellar.ChatTools;
 /// falling back to SenderId / TargetId against our own charId — Whisper-Private-Chat-and-Friends.md "Send / peer
 /// identity"). The set is the UNION of the game's own conversation list (<see cref="IFriends.PrivateChats"/>: names,
 /// pinning, server unread counts, online state) and the peers seen live on <see cref="IChat.MessageReceived"/> (incoming
-/// AND outgoing whispers), sorted pinned-first then newest activity.
+/// AND outgoing whispers), sorted pinned-first then newest activity — plus, after a maintenance wipe, the peers only the
+/// on-disk history still knows (.WhisperHistory.cs; listed from the saved name / preview, never unread).
 ///
 /// Unread = the server's UnreadCount merged with our own live count, cleared on open. The server list is polled
 /// (≈2.5 s), so after we open a conversation it can still report the old count for a while: a server count only counts
@@ -36,6 +37,7 @@ public sealed partial class Plugin
         public string LatestText = "";
         public int LatestKind;              // 0 text, 3 sticker, 5 voice, 6 link (the game's ChitChatMsgType)
         public bool HistoryRequested;       // RequestPrivateHistory / CreatePrivateChat already asked this session
+        public bool SavedOnly;              // listed only from the on-disk history (.WhisperHistory.cs), no live/server data yet
     }
 
     private const int   HistoryWantRows     = 10;    // below this many shown messages, opening asks for history
@@ -97,6 +99,7 @@ public sealed partial class Plugin
             {
                 if (t.CharId == 0 || RecentlyClosed(t.CharId)) continue;
                 var c = GetOrCreateConv(t.CharId);
+                c.SavedOnly = false;
                 if (!string.IsNullOrEmpty(t.Name)) c.Name = t.Name;
                 c.IsTop = t.IsTop;
                 if (t.IsOnline is { } on) c.Online = on;
@@ -131,6 +134,7 @@ public sealed partial class Plugin
         if (m.IsHistory && !_convs.ContainsKey(peer) && RecentlyClosed(peer)) return;   // late history of a closed chat
         if (!m.IsHistory) _closedAt.Remove(peer);   // a new message re-opens a closed conversation
         var c = GetOrCreateConv(peer);
+        c.SavedOnly = false;
         bool self = IsSelf(m);
         if (!self)
         {
@@ -191,6 +195,7 @@ public sealed partial class Plugin
         if (_activeTab == ChatTab.Whisper) _sendTargetIndex = 4;
         var c = GetOrCreateConv(peer);
         MarkConversationRead(c);
+        EnsureSavedLoaded(peer);   // .WhisperHistory.cs — read its saved file in the background (merged in when it lands)
         if (!c.HistoryRequested)
         {
             c.HistoryRequested = true;
@@ -219,6 +224,36 @@ public sealed partial class Plugin
             _tabResetPending = true;
             _logDirty = true;
         }
+    }
+
+    // A conversation from the saved index (.WhisperHistory.cs): after maintenance the server's list may have lost it,
+    // so it is listed from the saved name / preview / time until live or server data replaces them. Never unread.
+    private void AddSavedConversation(SavedPeerInfo p)
+    {
+        if (p.CharId == 0 || p.CharId == SelfCharId() || p.LastMs <= 0 || RecentlyClosed(p.CharId)) return;
+        bool isNew = !_convs.ContainsKey(p.CharId);
+        var c = GetOrCreateConv(p.CharId);
+        if (isNew) c.SavedOnly = true;
+        if (c.Name.Length == 0) c.Name = p.Name;
+        if (c.Level == 0) c.Level = p.Level;
+        var last = DateTimeOffset.FromUnixTimeMilliseconds(p.LastMs).UtcDateTime;
+        if (last > c.LatestUtc) { c.LatestUtc = last; c.LatestText = p.Preview; c.LatestKind = p.Kind; }
+        _convOrderDirty = true;
+    }
+
+    // Saved history cleared / character changed: drop the conversations only the saved index put in the list.
+    private void RemoveSavedOnlyConversations()
+    {
+        List<long>? gone = null;
+        foreach (var c in _convs.Values) if (c.SavedOnly) (gone ??= new()).Add(c.CharId);
+        if (gone == null) return;
+        foreach (var id in gone)
+        {
+            _convs.Remove(id);
+            if (_selectedPeer == id) { _selectedPeer = 0; _tabResetPending = true; }
+        }
+        _convOrderDirty = true;
+        _logDirty = true;
     }
 
     private int CountShownWhispers(long peer)

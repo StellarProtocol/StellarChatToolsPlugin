@@ -69,7 +69,7 @@ public sealed partial class Plugin
     // One RECYCLED pool slot (VirtualListElement reuses ~LogPoolSize of these across the whole log, repositioning +
     // rebinding them as you scroll — NOT a fixed display position). It lazily builds the LEFT (others) or RIGHT
     // (self) branch, and the ConditionalElement re-picks per the data row currently bound to the slot (IsSelfRow
-    // reads the live LogMsgIndex = _windowFirst + i), so a recycled slot flips alignment to match whatever message
+    // reads the live filtered row _windowFirst + i via TryMsg), so a recycled slot flips alignment to match whatever message
     // it now shows (ConditionalElement defers branch construction until first shown — WindowBuilder.Layout.cs).
     private HudElement BuildBubbleSlot(int i)
         // Wrap the per-row ConditionalElement in a width-expanding ColumnElement with a trailing fixed-height

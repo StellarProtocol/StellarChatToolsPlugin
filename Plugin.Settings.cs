@@ -9,8 +9,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// The settings window (<c>chattools.settings</c>), toggled by the title-bar ⚙ of the chat window. A SEPARATE window,
 /// not a drawer inside <c>chattools.main</c>: the inline drawer squeezed the log and got messy in a short window, and
-/// the chat layout must never change when settings open. Content: auto-reply, translation (.Translate.cs) and the
-/// channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
+/// the chat layout must never change when settings open. Content: auto-reply, translation (.Translate.cs), whisper
+/// history (.WhisperHistory.Settings.cs) and the channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
 ///
 /// Placement: re-centred over the chat window's CURRENT rect on EVERY open (clamped on-screen) — it reads as a sheet
 /// over the chat, so it should open where the chat is now, not wherever it was last dragged. While open it can be
@@ -162,6 +162,11 @@ public sealed partial class Plugin
 
         // Translation (.Translate.cs): target language, hover-button toggle, and the privacy note.
         BuildTranslateSettings(),
+
+        new SeparatorElement(),
+
+        // Whisper history (.WhisperHistory.Settings.cs): keep toggle, storage note, clear-with-confirm + stats.
+        BuildWhisperHistorySettings(),
 
         new SeparatorElement(),
 

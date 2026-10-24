@@ -15,15 +15,16 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    // Indices into _chat.RecentMessages that pass the active-tab filter, rebuilt only when dirty. Reused
-    // across frames (Clear + re-add) so steady-state draw does not allocate.
-    private readonly List<int> _filtered = new(MaxLogRows);
+    // The messages that pass the active-tab filter, in display order, rebuilt only when dirty. Reused across frames
+    // (Clear + re-add) so steady-state draw does not allocate. The ROWS themselves, not indices into
+    // _chat.RecentMessages: an open conversation also shows saved lines (.WhisperHistory.cs) that aren't in the ring.
+    private readonly List<ChatMessage> _filtered = new(MaxLogRows);
     private bool _logDirty = true;
     private ChatTab _lastFilterTab = (ChatTab)(-1);   // force first EnsureFiltered to build
     private long _lastFilterPeer;                     // the Whisper tab's selected conversation the filter was built for
 
     // The virtual list OWNS windowing now: OnWindow pushes the first visible FILTERED row here each poll, and
-    // LogMsgIndex maps pool slot k -> filtered row _windowFirst + k. (Was a newest-MaxLogRows display window.)
+    // TryMsg maps pool slot k -> filtered row _windowFirst + k. (Was a newest-MaxLogRows display window.)
     private int _windowFirst;
 
     // Recycled bubble pool size (K): ~viewport-worth of GameObjects, reused as you scroll (NOT display positions).
@@ -144,8 +145,8 @@ public sealed partial class Plugin
         {
             var cm = m[i];
             if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)
-            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer) _filtered.Add(i); }
-            else if (ch == null || cm.Channel == ch.Value) _filtered.Add(i);
+            if (peer >= 0) { if (peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer) _filtered.Add(cm); }
+            else if (ch == null || cm.Channel == ch.Value) _filtered.Add(cm);
         }
 
         // RecentMessages is pure append/ARRIVAL order, and on login the server sends chat history batched PER
@@ -157,7 +158,10 @@ public sealed partial class Plugin
         // IS monotonic with arrival). Live messages already arrive in time order → a no-op for them; only the
         // scrambled login burst gets reordered. Must materialize (ToArray) BEFORE Clear — OrderBy is lazy over
         // _filtered itself. ⚠️ Do NOT tie-break on MsgId: it is per-peer for whispers, not globally monotonic.
-        var ordered = _filtered.OrderBy(i => m[i].Timestamp).ToArray();
+        var ordered = _filtered.OrderBy(x => x.Timestamp).ToList();
+        // An open conversation also shows its saved history (.WhisperHistory.cs) — every saved line the server didn't
+        // provide, merged in time order. Unloaded / no saved file → the server list unchanged.
+        if (peer > 0) ordered = MergeSavedWhispers(peer, ordered);
         _filtered.Clear();
         _filtered.AddRange(ordered);
 
@@ -174,27 +178,13 @@ public sealed partial class Plugin
         return _filtered.Count;
     }
 
-    // Pool slot -> index into RecentMessages. The virtual list owns windowing (_windowFirst = first visible
-    // filtered row, pushed via OnWindow); pool slot k shows filtered row _windowFirst + k.
-    private int LogMsgIndex(int poolSlot)
-    {
-        EnsureFiltered();
-        int fi = _windowFirst + poolSlot;
-        return (fi >= 0 && fi < _filtered.Count) ? _filtered[fi] : -1;
-    }
-
-    private bool TryMsg(int slot, out ChatMessage msg)
-    {
-        var m = _chat.RecentMessages;
-        int i = LogMsgIndex(slot);
-        if (i >= 0 && i < m.Count) { msg = m[i]; return true; }
-        msg = default!;
-        return false;
-    }
+    // Pool slot -> its message. The virtual list owns windowing (_windowFirst = first visible filtered row, pushed via
+    // OnWindow); pool slot k shows filtered row _windowFirst + k.
+    private bool TryMsg(int slot, out ChatMessage msg) => TryDataMsg(_windowFirst + slot, out msg);
 
     // Stable per-message identity for the variable list's height-cache verification (VirtualListElement.RowId).
     // ⚠️ The framework feeds the DATA index (= filtered-row index, _windowFirst-INDEPENDENT), NOT a pool slot — so
-    // resolve it straight through _filtered here, never via TryMsg/LogMsgIndex (those add _windowFirst and would
+    // resolve it straight through _filtered here, never via TryMsg (it adds _windowFirst and would
     // read the wrong row). Every ChatMessage field is immutable, so this id is CONSTANT for a given message no
     // matter which ring index it drifts to as the 500-entry RecentMessages ring front-drops — which is exactly what
     // lets the list notice a data index now points at a different message and re-verify that row's cached height.
@@ -207,9 +197,7 @@ public sealed partial class Plugin
     private bool TryDataMsg(int dataIndex, out ChatMessage msg)
     {
         EnsureFiltered();
-        var m = _chat.RecentMessages;
-        int ri = dataIndex >= 0 && dataIndex < _filtered.Count ? _filtered[dataIndex] : -1;
-        if (ri >= 0 && ri < m.Count) { msg = m[ri]; return true; }
+        if (dataIndex >= 0 && dataIndex < _filtered.Count) { msg = _filtered[dataIndex]; return true; }
         msg = default!;
         return false;
     }
