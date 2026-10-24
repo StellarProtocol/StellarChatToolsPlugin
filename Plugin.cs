@@ -183,7 +183,7 @@ public sealed partial class Plugin : IStellarPlugin
     // independently of visibility.
     private void HideChat()
     {
-        CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseSettings();
+        CloseTargetMenu(); CloseConvMenu(); CloseMsgMenu(); CloseTrOutMenu(); CloseFriendPicker(); CloseFavMenu(); CloseSettings();
         _window.SetVisible(false);
     }
 

@@ -212,9 +212,13 @@ public sealed partial class Plugin
 
     // The menu window is destroyed while hidden and remounts a frame (or more) later, so the SetRect in OpenFavMenu
     // no-ops on the first open; re-assert once the mount lands (Framework.Update).
+    // Also closes the menu with its owners, like the whisper popups (.WhisperList.cs TickWhisperPopups): the chat window
+    // closing (✕, hotkey, logout) or the sticker picker it belongs to closing.
     private void TickFavMenuPlace(float _)
     {
-        if (!_favMenuOpen || _favMenuPlaced) return;
+        if (!_favMenuOpen) return;
+        if (!_window.IsShown || !_stickerOpen) { CloseFavMenu(); return; }
+        if (_favMenuPlaced) return;
         if (_favMenuWindow.IsShown) { _favMenuWindow.SetRect(_favMenuRect); _favMenuPlaced = true; }
     }
 
