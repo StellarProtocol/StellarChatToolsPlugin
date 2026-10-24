@@ -8,8 +8,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// The send composer: ONE row of equal-height (28) controls — a channel-coloured target chip (.SendTarget.cs), ＋ (quick
 /// phrases), ☺ (stickers/emoji), the text field (placeholder follows the target), a counter shown only near the 140 cap,
-/// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings moved to the
-/// title-bar gear (.Window.cs). The target defaults to the active read-tab's channel but is overridable. Whisper is per
+/// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings live in their own
+/// window behind the title-bar gear (.Settings.cs). The target defaults to the active read-tab's channel but is overridable. Whisper is per
 /// PERSON: target 4 whispers the conversation selected in the Whisper tab (.Whisper.cs) — the chip then reads "→ Name".
 /// No local echo — sends round-trip via MessageReceived (and teach us our own identity, see Bubbles).
 /// </summary>

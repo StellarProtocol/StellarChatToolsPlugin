@@ -8,16 +8,16 @@ namespace Stellar.ChatTools;
 
 /// <summary>
 /// In-game chat client: a rolling, channel-filtered log, a send composer with per-channel targets +
-/// quick phrases, whisper reply/auto-reply, and a settings drawer. Reads/sends via the framework
+/// quick phrases, whisper reply/auto-reply, and a separate settings window. Reads/sends via the framework
 /// <see cref="IChat"/> surface only (no packet construction) and never echoes locally — sent messages
 /// round-trip through <see cref="IChat.MessageReceived"/> like any other.
 ///
-/// Phase 1 CORE of the redesign (resizable window, read-tabs, composer, quick phrases, settings drawer,
+/// Phase 1 CORE of the redesign (resizable window, read-tabs, composer, quick phrases, settings window,
 /// config persistence). Emoji picker / inline sprite rendering is a deferred follow-up; a seam (the
 /// disabled emoji button in the composer toolbar) is left for it — see <see cref="BuildComposer"/>.
 ///
-/// Laid out as partials (500-LoC CI gate): Plugin.cs (lifecycle), Plugin.Window.cs (layout + settings
-/// drawer), Plugin.Tabs.cs (read-tabs + unread), Plugin.Log.cs (rows/filter/colours), Plugin.Composer.cs
+/// Laid out as partials (500-LoC CI gate): Plugin.cs (lifecycle), Plugin.Window.cs (layout), Plugin.Settings.cs (settings
+/// window + title gear), Plugin.Tabs.cs (read-tabs + unread), Plugin.Log.cs (rows/filter/colours), Plugin.Composer.cs
 /// (send + quick phrases), Plugin.AutoReply.cs (inbound handler + auto-reply), Plugin.Config.cs (persist).
 ///
 /// Hotkey: F12 toggles visibility (user can rebind).
@@ -86,9 +86,9 @@ public sealed partial class Plugin : IStellarPlugin
                     MaxWidth = 1000f, MaxHeight = 1100f,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
-                TitleTrailing: BuildTitleGear(),   // .Window.cs — settings ⚙ in the title bar, before the ✕
-                // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs).
-                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseFriendPicker(); _window!.SetVisible(false); }),
+                TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕
+                // Don't strand the popups (.SendTarget.cs / .WhisperList.cs / .FriendPicker.cs) or the settings window.
+                OnClose: () => { CloseTargetMenu(); CloseConvMenu(); CloseFriendPicker(); CloseSettings(); _window!.SetVisible(false); }),
             new HotkeyAction(
                 Id:              "chattools.toggle",
                 Description:     _loc.T("chat.hotkey.toggle"),
@@ -118,6 +118,10 @@ public sealed partial class Plugin : IStellarPlugin
         _convMenuWindow = RegisterConvMenuWindow();
         _friendPickerWindow = RegisterFriendPickerWindow();
         _services.Framework.Update += TickWhisper;
+        // Settings (.Settings.cs): its own window, toggled by the title ⚙; centred over the chat on each open and
+        // closed with it.
+        _settingsWindow = RegisterSettingsWindow();
+        _services.Framework.Update += TickSettings;
     }
 
     public void Dispose()
@@ -128,6 +132,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickTargetMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickAvatarDecode; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickWhisper; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         DisposeWhisper();
         DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
         _sayColor.Dispose();
@@ -141,6 +146,7 @@ public sealed partial class Plugin : IStellarPlugin
         _targetMenuWindow?.Remove();
         _convMenuWindow?.Remove();
         _friendPickerWindow?.Remove();
+        _settingsWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
 }

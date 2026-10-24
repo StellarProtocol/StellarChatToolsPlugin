@@ -74,7 +74,7 @@ public sealed partial class Plugin
         return TrLangIndex.ContainsKey(ui) ? ui : "en";
     }
 
-    // ── Settings ⚙ section (.Window.cs drawer) ────────────────────────────────────────────────────────────────────
+    // ── Settings ⚙ section (.Settings.cs window) ───────────────────────────────────────────────────────────────────
     private HudElement BuildTranslateSettings() => new ColumnElement(new HudElement[]
     {
         new TextElement(() => _loc.T("chat.translate.title"), Emphasis: true),
