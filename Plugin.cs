@@ -56,6 +56,7 @@ public sealed partial class Plugin : IStellarPlugin
         _services.Log.Info("[ChatTools] plugin constructed");
 
         RegisterColors();   // .Log.cs — must precede BuildRoot's colour Funcs resolving at draw time
+        InitLanguage();     // .Language.cs — live language switch (titles, colour labels, default auto-reply)
         LoadConfig();       // .Config.cs — quick phrases, auto-reply, font size, default send target
 
         _window = _services.Windows.Register(
@@ -72,6 +73,8 @@ public sealed partial class Plugin : IStellarPlugin
                     // Starts HIDDEN: opened only by the hotkey or the Stellar menu tile. StartVisible covers boot;
                     // OnPhaseChanged re-hides on every later world entry (Visible is session state, so a window left
                     // open at logout would otherwise come back up on the next character's login).
+                    // Live-localized: the chrome re-reads it on a language switch (Title stays the build-time fallback).
+                    TitleProvider = () => _loc.T("chat.window.title"),
                     StartVisible = false,
                     ShouldRender = () => _services.ClientState.Phase == GamePhase.World && (_services.ClientState.UiState & GameUIState.Loading) == 0,
                     // Render on our OWN nested canvas (a uGUI batching boundary). The log is a ScrollRect: scrolling
@@ -214,12 +217,8 @@ public sealed partial class Plugin : IStellarPlugin
         DisposeWhisper();
         DisposeWhisperHistory();   // .WhisperHistory.cs — write pending lines, wait briefly for the worker
         DisposeTranslate();   // .Translate.Net.cs — cancel in-flight requests; late results are dropped
-        _sayColor.Dispose();
-        _worldColor.Dispose();
-        _partyColor.Dispose();
-        _guildColor.Dispose();
-        _whisperColor.Dispose();
-        _systemColor.Dispose();
+        DisposeLanguage();
+        DisposeColorSlots();   // .Language.cs
         _window.Remove();
         _favMenuWindow?.Remove();
         _targetMenuWindow?.Remove();

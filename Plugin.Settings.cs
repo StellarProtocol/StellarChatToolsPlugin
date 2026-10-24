@@ -45,6 +45,7 @@ public sealed partial class Plugin
             Category:    WindowCategory.Tools,
             Style:       WindowPanelStyle.GlassMenu)
         { StartVisible = false, Closable = true, Draggable = true,
+          TitleProvider = () => _loc.T("chat.settings.windowTitle"),   // re-read on a live language switch (.Language.cs)
           ShouldRender = () => _services.ClientState.Phase == GamePhase.World
                             && (_services.ClientState.UiState & GameUIState.Loading) == 0 },
         BuildSettingsRoot(),
