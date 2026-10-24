@@ -63,8 +63,12 @@ public sealed partial class Plugin
         // Invariant-culture integer literal: no float conversion, no locale digit grouping. charIds sit far below 2^53,
         // so the Lua number is exact. pcall keeps a Lua-side error from crossing the interop trampoline.
         var id = charId.ToString(CultureInfo.InvariantCulture);
+        // The rented CancelSource goes back to the game's pool once the request is done — on success AND on error (the
+        // xpcall error handler) — instead of one leaked source per click. Each path recycles at most once.
         _services.Lua.DoString(
-            "pcall(function() local cs=Z.CancelSource.Rent(); Z.CoroUtil.create_coro_xpcall(function() " +
-            "Z.VMMgr.GetVM(\"idcard\").AsyncGetCardData(" + id + ", cs:CreateToken()) end)() end)");
+            "pcall(function() local cs=Z.CancelSource.Rent() local done=false " +
+            "local function rel() if not done then done=true pcall(function() cs:Recycle() end) end end " +
+            "Z.CoroUtil.create_coro_xpcall(function() " +
+            "Z.VMMgr.GetVM(\"idcard\").AsyncGetCardData(" + id + ", cs:CreateToken()) rel() end, rel)() end)");
     }
 }
