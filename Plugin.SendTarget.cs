@@ -151,7 +151,7 @@ public sealed partial class Plugin
         if (_chipPeer != _selectedPeer || !string.Equals(name, _chipName, StringComparison.Ordinal))
         {
             _chipPeer = _selectedPeer; _chipName = name;
-            _chipText = "→ " + name;
+            _chipText = name;   // no "→": the menu font has no U+2192 glyph (draws a blank gap); the whisper colour marks the chip
         }
         return _chipText;
     }
