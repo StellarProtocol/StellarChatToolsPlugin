@@ -2,14 +2,13 @@ using System;
 using System.Collections.Generic;
 using Stellar.Abstractions.Domain;
 using Stellar.Abstractions.Services;
-using UnityEngine;
 
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// The outgoing-translate language menu behind the composer 文A pill (.TranslateOut.cs). Same cursor-popup pattern as
-/// the send-target menu (.SendTarget.cs: Borderless + DismissOnOutsideClick, opened ABOVE the cursor because the
-/// composer is the window's bottom edge, rect re-asserted once the destroy-on-hide window remounts, a pill re-click
+/// The outgoing-translate language menu behind the composer 文A pill (.TranslateOut.cs). Same button-anchored popup as
+/// the send-target menu (.SendTarget.cs / .PopupAnchor.cs: Borderless + DismissOnOutsideClick, opened ABOVE the pill
+/// because the composer is the window's bottom edge, rect settled once the destroy-on-hide window remounts, a pill re-click
 /// within 0.3 s of a close ignored). Content: the title "Translate my message to", up to 3 RECENT outgoing languages
 /// (persisted, most recent first; none yet = the incoming translate target), the divider, then the full Settings list
 /// (.Translate.Langs.cs — same order and "native (localized)" labels) in a scrollable virtual list.
@@ -24,15 +23,15 @@ public sealed partial class Plugin
     private const float  TrOutRowHeight   = 28f;    // uniform VirtualList pitch = one Selectable text row + gap
     private const float  TrOutListHeight  = 224f;   // 8 rows visible, the rest scroll
     private const int    TrOutPoolSize    = 11;     // 224 ÷ 28 + buffer
-    // Title + 3 recents + divider + the list + panel padding / gaps — only used to open the menu above the cursor and
-    // for the edge flip (the window itself fits its content).
+    // Title + 3 recents + divider + the list + panel padding / gaps — the open-time estimate for placing the menu above
+    // the 文A pill and for the edge flip (the window itself fits its content; its live size takes over once shown).
     private const float  TrOutMenuH       = 26f + TrOutRecentMax * TrOutRowHeight + 22f + TrOutListHeight + 40f;
 
     private readonly List<string> _trOutRecent = new();
     private IWindowControl _trOutMenuWindow = null!;
-    private bool _trOutMenuOpen, _trOutMenuPlaced;
+    private bool _trOutMenuOpen;
     private float _trOutMenuClosedAt = -1f;
-    private WindowRect _trOutMenuRect;
+    private readonly AnchoredPopup _trOutMenuAnchor = new(TrOutMenuW, TrOutMenuH, preferAbove: true);
     private int _trOutListFirst;
 
     private void LoadTranslateOutConfig()
@@ -135,39 +134,30 @@ public sealed partial class Plugin
         StartOutgoingTranslation(code);   // .TranslateOut.cs
     }
 
-    private void ToggleTrOutMenu()
+    // `pill` = the 文A pill's screen rect. Opened ABOVE the pill, left edges aligned, below it when there is no room
+    // above — as ToggleTargetMenu (.PopupAnchor.cs).
+    private void ToggleTrOutMenu(WindowRect pill)
     {
         if (_trOutMenuOpen) { CloseTrOutMenu(); return; }
         if (_trOutMenuClosedAt >= 0f && _services.Framework.TimeNow - _trOutMenuClosedAt < TargetMenuReopenGuardSec) return;
-        // Cursor → canvas units, opened ABOVE the cursor and flipped below at the top edge — as ToggleTargetMenu.
-        var fw = _services.Framework;
-        float k = fw.ScreenWidth > 0 && fw.CanvasWidth > 0 ? (float)fw.CanvasWidth / fw.ScreenWidth : 1f;
-        float cw = fw.CanvasWidth > 0 ? fw.CanvasWidth : Screen.width;
-        float ch = fw.CanvasHeight > 0 ? fw.CanvasHeight : Screen.height;
-        var mp = Input.mousePosition;
-        float x = mp.x * k - 12f, y = (Screen.height - mp.y) * k - TrOutMenuH - 6f;
-        if (y < 0f) y = Mathf.Min((Screen.height - mp.y) * k + 6f, Mathf.Max(0f, ch - TrOutMenuH));
-        x = Mathf.Clamp(x, 0f, Mathf.Max(0f, cw - TrOutMenuW));
-        _trOutMenuRect = new WindowRect(x, y, TrOutMenuW, TrOutMenuH);
-        _trOutMenuPlaced = false;
         _trOutMenuOpen = true;
-        _trOutMenuWindow.SetRect(_trOutMenuRect);   // no-op while still unmounted; re-asserted in TickTrOutMenu
+        PlaceAnchoredPopup(_trOutMenuWindow, _trOutMenuAnchor, pill);   // before SetVisible: applied on first mount
         _trOutMenuWindow.SetVisible(true);          // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
-    // Framework.Update: re-assert the rect once the remount lands; close with the chat window (see TickTargetMenu).
+    // Framework.Update: settle the rect from the live size (0–3 recents change the height); close with the chat window
+    // (see TickTargetMenu).
     private void TickTrOutMenu(float _)
     {
         if (!_trOutMenuOpen) return;
         if (!_window.IsShown) { CloseTrOutMenu(); return; }
-        if (!_trOutMenuPlaced && _trOutMenuWindow.IsShown) { _trOutMenuWindow.SetRect(_trOutMenuRect); _trOutMenuPlaced = true; }
+        SettleAnchoredPopup(_trOutMenuWindow, _trOutMenuAnchor);
     }
 
     private void CloseTrOutMenu()
     {
         if (!_trOutMenuOpen) return;
         _trOutMenuOpen = false;
-        _trOutMenuPlaced = false;
         _trOutMenuClosedAt = _services.Framework.TimeNow;
         _trOutMenuWindow?.SetVisible(false);
     }

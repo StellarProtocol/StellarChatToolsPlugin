@@ -164,7 +164,7 @@ public sealed partial class Plugin
         {
             // "+ New chat" in the whisper colours (same pill as the composer controls).
             BuildPill(() => _loc.T("chat.whisper.newChat"), () => TabActiveText(ChatTab.Whisper),
-                () => TabPillFill(ChatTab.Whisper), OpenFriendPicker),   // .FriendPicker.cs
+                () => TabPillFill(ChatTab.Whisper), NoClick, onClickRect: OpenFriendPicker),   // .FriendPicker.cs
             new ConditionalElement(() => ConvOrder().Count == 0,
                 new TextElement(() => _loc.T("chat.whisper.empty"), MutedCol)),
             new VirtualListElement(
@@ -323,7 +323,6 @@ public sealed partial class Plugin
         if (!_convMenuOpen && !_friendPickerOpen) return;
         if (!_window.IsShown) { CloseConvMenu(); CloseFriendPicker(); return; }
         if (_convMenuOpen && !_convMenuPlaced && _convMenuWindow.IsShown) { _convMenuWindow.SetRect(_convMenuRect); _convMenuPlaced = true; }
-        if (_friendPickerOpen && !_friendPickerPlaced && _friendPickerWindow.IsShown)
-        { _friendPickerWindow.SetRect(_friendPickerRect); _friendPickerPlaced = true; }
+        if (_friendPickerOpen) SettleAnchoredPopup(_friendPickerWindow, _friendPickerAnchor);   // .PopupAnchor.cs
     }
 }

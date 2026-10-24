@@ -121,13 +121,13 @@ public sealed partial class Plugin : IStellarPlugin
         // re-asserts its rect once the window has remounted after SetVisible(true).
         _favMenuWindow = RegisterFavMenuWindow();
         _services.Framework.Update += TickFavMenuPlace;
-        // Send-target picker (.SendTarget.cs): same cursor-popup pattern as the sticker menu.
+        // Send-target picker (.SendTarget.cs): a popup anchored to the chip (.PopupAnchor.cs).
         _targetMenuWindow = RegisterTargetMenuWindow();
         _services.Framework.Update += TickTargetMenu;
         // Avatar decodes (.Avatars.cs) run here under a fixed per-tick budget — never inside the window apply.
         _services.Framework.Update += TickAvatarDecode;
         // Per-person whispers (.Whisper.cs): conversation list from IFriends + live whispers; the conversation right-click
-        // menu (.WhisperList.cs) and the "+ New chat" friend picker (.FriendPicker.cs) are cursor popups like the above.
+        // menu (.WhisperList.cs) and the "+ New chat" friend picker (.FriendPicker.cs) are popups too (cursor / anchored).
         InitWhisper();
         _convMenuWindow = RegisterConvMenuWindow();
         _friendPickerWindow = RegisterFriendPickerWindow();

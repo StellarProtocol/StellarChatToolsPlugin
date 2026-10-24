@@ -41,7 +41,7 @@ public sealed partial class Plugin
     private HudElement BuildTrOutButton() => BuildIconPill(
         new TextElement(() => TrIcon, TrOutGlyph, FontSize: TrButtonFontSize, Align: TextAlign.Center, NoWrap: true)
             { Bold = true },   // Bold = the TMP path, which honours FontSize on this surface (plain Text ignores it)
-        TrOutFill, OnTrOutClick, () => TrOutBusy() ? TrBlue : null);
+        TrOutFill, NoClick, () => TrOutBusy() ? TrBlue : null, onClickRect: OnTrOutClick);
 
     private ColorRgba? TrOutFill() => _trOutPhase switch
     {
@@ -60,12 +60,12 @@ public sealed partial class Plugin
     private const float TrOutDisabledAlpha = 0.45f;
 
     // Pending: no-op (busy). Failed: retry with the same language at once. Otherwise open / close the language menu.
-    // An empty (or emoji-only) draft greys the pill and ignores the click.
-    private void OnTrOutClick()
+    // An empty (or emoji-only) draft greys the pill and ignores the click. `pill` = its screen rect (the menu's anchor).
+    private void OnTrOutClick(WindowRect pill)
     {
         if (TrOutBusy() || !CanTranslateDraft()) return;
         if (_trOutPhase == TrOutPhase.Failed && _trOutLang.Length > 0) { StartOutgoingTranslation(_trOutLang); return; }
-        ToggleTrOutMenu();   // .TranslateOut.Menu.cs
+        ToggleTrOutMenu(pill);   // .TranslateOut.Menu.cs
     }
 
     // ── Request ───────────────────────────────────────────────────────────────────────────────────────────────────

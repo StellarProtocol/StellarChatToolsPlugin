@@ -9,10 +9,11 @@ namespace Stellar.ChatTools;
 /// The composer's send-target CHIP and its picker, plus the shared composer "pill" control. The chip wears the target
 /// channel's colours exactly like the read-tabs (.Tabs.cs): the channel tint as the fill and the contrast-floored full
 /// colour as bold text, labelled with the tab's own name (so "Current" here = the Current tab). DropdownElement can't
-/// be styled (fixed grey trigger), so the chip is a SelectableElement that opens a cursor-positioned popup menu — the
-/// sticker right-click menu pattern (.Favorites.cs: Borderless + DismissOnOutsideClick, rect re-asserted once the
-/// destroy-on-hide window remounts). Picking keeps the old dropdown semantics: <see cref="OnPickTarget"/> sets the target
-/// and persists it as the default (<see cref="SaveSendTarget"/>); opening a read-tab still only changes it in memory.
+/// be styled (fixed grey trigger), so the chip is a SelectableElement that opens a popup menu anchored to the chip
+/// (.PopupAnchor.cs) — the sticker right-click menu's window pattern (.Favorites.cs: Borderless + DismissOnOutsideClick,
+/// rect settled once the destroy-on-hide window remounts). Picking keeps the old dropdown semantics:
+/// <see cref="OnPickTarget"/> sets the target and persists it as the default (<see cref="SaveSendTarget"/>); opening a
+/// read-tab still only changes it in memory.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -39,8 +40,8 @@ public sealed partial class Plugin
 
     private const string TargetMenuId = "chattools.targetmenu";
     private const float  TargetMenuW  = 150f;    // canvas units
-    // 5 pills × 28 + 4 column gaps × 2 + panel padding 2 × 6 — only used to open the menu ABOVE the cursor (the
-    // composer sits at the bottom of the window) and for the edge flip, like FavMenuH.
+    // 5 pills × 28 + 4 column gaps × 2 + panel padding 2 × 6 — the open-time estimate for placing the menu ABOVE the
+    // chip (the composer sits at the bottom of the window) and for the edge flip; the live size takes over once shown.
     private const float  TargetMenuH  = 160f;
 
     // Composer target index (0=Say … 4=Whisper, see _sendTargetIndex) → the read-tab whose colours + label it wears.
@@ -48,12 +49,12 @@ public sealed partial class Plugin
         { ChatTab.Current, ChatTab.World, ChatTab.Party, ChatTab.Guild, ChatTab.Whisper };
 
     private IWindowControl _targetMenuWindow = null!;
-    private bool _targetMenuOpen, _targetMenuPlaced;
+    private bool _targetMenuOpen;
     private float _targetMenuClosedAt = -1f;      // IFramework.TimeNow of the last close (chip re-click debounce)
     // A click on the chip while the menu is open first DISMISSES it (outside-click fires on the press), then the release
     // lands on the chip as a click — which would reopen it at once. Ignore a chip click this soon after a close.
     private const float TargetMenuReopenGuardSec = 0.3f;
-    private WindowRect _targetMenuRect;
+    private readonly AnchoredPopup _targetMenuAnchor = new(TargetMenuW, TargetMenuH, preferAbove: true);
 
     // Placeholder cache ("Message Guild…"): the input polls it every refresh, so the formatted string is rebuilt only
     // when the template or that target's label changes (language switch) — never allocated per poll.
@@ -114,10 +115,11 @@ public sealed partial class Plugin
     // the min-width composer row the bubble hugs its natural width; in a fixed-width cell it is stretched to the cell.
     // Text pills get fixed-width struts (horizontal padding); icon pills get flexible ones (Width 0 = flexible), which
     // centre the glyph in the fixed square. `outline` (optional) = a live border ring colour (null = none) — the translate
-    // pill's busy state (.Translate.cs); it is an overlay, so it never changes the pill's size.
+    // pill's busy state (.Translate.cs); it is an overlay, so it never changes the pill's size. `onClickRect` (optional)
+    // also gets the pill's screen rect on click — for a popup anchored to the pill (.PopupAnchor.cs).
     private HudElement BuildPill(HudElement[] content, Func<ColorRgba?> fill, Action onClick, float width = 0f,
-        Func<ColorRgba?>? outline = null)
-        => new CellElement(PillBubble(content, fill, onClick, width > 0f, outline), Width: width);
+        Func<ColorRgba?>? outline = null, Action<WindowRect>? onClickRect = null)
+        => new CellElement(PillBubble(content, fill, onClick, width > 0f, outline, onClickRect: onClickRect), Width: width);
 
     // The pill's Bubble without BuildPill's Cell. ⚠️ A Bubble with MaxWidth 0 caps at its PARENT's width, and a natural
     // Cell is sized FROM the bubble — so a pill whose label changes at runtime (arm/disarm, a language switch) can only
@@ -126,7 +128,7 @@ public sealed partial class Plugin
     // bubble DIRECTLY in a Row that a Column stretches (cap = the full row = wraps only past the window), or set
     // `maxWidth` (a static cap, independent of the parent).
     private BubbleElement PillBubble(HudElement[] content, Func<ColorRgba?> fill, Action onClick, bool icon = false,
-        Func<ColorRgba?>? outline = null, float maxWidth = 0f)
+        Func<ColorRgba?>? outline = null, float maxWidth = 0f, Action<WindowRect>? onClickRect = null)
     {
         var row = new HudElement[content.Length + 2];
         row[0] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
@@ -134,7 +136,7 @@ public sealed partial class Plugin
         row[row.Length - 1] = new SpacerElement(Width: icon ? 0f : PillPadX, Height: PillStrutHeight);
         return new BubbleElement(new SelectableElement(
                 new RowElement(row, Gap: icon ? IconPillGap : PillGap, Justify: RowJustify.Center),
-                OnClick: onClick))
+                OnClick: onClick) { OnClickWithRect = onClickRect })
             {
                 // Transparent static fill (NOT null — null = the themed accent default); FillColorFn re-tints live.
                 CornerRadius = PillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent, FillColorFn = fill,
@@ -142,12 +144,18 @@ public sealed partial class Plugin
             };
     }
 
-    private HudElement BuildPill(Func<string> label, Func<ColorRgba?> text, Func<ColorRgba?> fill, Action onClick)
-        => BuildPill(new HudElement[] { new TextElement(label, text, Emphasis: true, NoWrap: true) }, fill, onClick);
+    private HudElement BuildPill(Func<string> label, Func<ColorRgba?> text, Func<ColorRgba?> fill, Action onClick,
+        Action<WindowRect>? onClickRect = null)
+        => BuildPill(new HudElement[] { new TextElement(label, text, Emphasis: true, NoWrap: true) }, fill, onClick,
+            onClickRect: onClickRect);
 
     // A square ComposerControlSize icon pill (＋ / ☺ / the translate 文A) around one centred glyph element.
-    private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick, Func<ColorRgba?>? outline = null)
-        => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize, outline);
+    private HudElement BuildIconPill(HudElement glyph, Func<ColorRgba?> fill, Action onClick, Func<ColorRgba?>? outline = null,
+        Action<WindowRect>? onClickRect = null)
+        => BuildPill(new HudElement[] { glyph }, fill, onClick, ComposerControlSize, outline, onClickRect);
+
+    // OnClick for a pill whose real handler is its onClickRect (SelectableElement.OnClick is required).
+    private static void NoClick() { }
 
     // [Guild ▾] in the target channel's tab colours (active-tab look); while whispering, the RECIPIENT chip [→ Name ▾] in
     // the whisper colours (TargetTab() is Whisper then). Click → the picker menu (picking a channel leaves whisper —
@@ -183,7 +191,7 @@ public sealed partial class Plugin
                 new TextElement(ChipLabel, () => TabActiveText(TargetTab()), Emphasis: true, NoWrap: true),
                 BuildChevron(),
             },
-            () => TabPillFill(TargetTab()), ToggleTargetMenu));
+            () => TabPillFill(TargetTab()), NoClick, onClickRect: ToggleTargetMenu));
 
     // The non-interactive whisper pill: same Bubble fill + rounding as BuildPill but NO Selectable (no hover wash, no
     // click target) and no chevron. BuildPill gets its 28 from the Selectable's 4+4 / 6+6 padding around 20-tall
@@ -268,44 +276,33 @@ public sealed partial class Plugin
             OnClose: CloseTargetMenu));   // framework invokes this on Escape / click-outside (per-frame ticker)
     }
 
-    private void ToggleTargetMenu()
+    // `chip` = the chip's screen rect (SelectableElement.OnClickWithRect). The menu opens ABOVE the chip, left edges
+    // aligned (the composer is the window's bottom edge, like the game's own channel picker), below it when there is
+    // no room above (.PopupAnchor.cs).
+    private void ToggleTargetMenu(WindowRect chip)
     {
         if (_targetMenuOpen) { CloseTargetMenu(); return; }
         if (_targetMenuClosedAt >= 0f && _services.Framework.TimeNow - _targetMenuClosedAt < TargetMenuReopenGuardSec) return;
-        // Cursor → canvas units (Input.mousePosition is bottom-left SCREEN px; WindowRect is top-left CANVAS units —
-        // same conversion as OpenFavMenu). Opens ABOVE the cursor (the composer is the window's bottom edge, like the
-        // game's own channel picker), flipping below if that would leave the top of the canvas; clamped horizontally.
-        var fw = _services.Framework;
-        float k = fw.ScreenWidth > 0 && fw.CanvasWidth > 0 ? (float)fw.CanvasWidth / fw.ScreenWidth : 1f;
-        float cw = fw.CanvasWidth > 0 ? fw.CanvasWidth : Screen.width;
-        float ch = fw.CanvasHeight > 0 ? fw.CanvasHeight : Screen.height;
-        var mp = Input.mousePosition;
-        float x = mp.x * k - 12f, y = (Screen.height - mp.y) * k - TargetMenuH - 6f;
-        if (y < 0f) y = Mathf.Min((Screen.height - mp.y) * k + 6f, Mathf.Max(0f, ch - TargetMenuH));
-        x = Mathf.Clamp(x, 0f, Mathf.Max(0f, cw - TargetMenuW));
-        _targetMenuRect = new WindowRect(x, y, TargetMenuW, TargetMenuH);
-        _targetMenuPlaced = false;
         _targetMenuOpen = true;
-        _targetMenuWindow.SetRect(_targetMenuRect);   // no-op while still unmounted; re-asserted in TickTargetMenu
+        PlaceAnchoredPopup(_targetMenuWindow, _targetMenuAnchor, chip);   // before SetVisible: applied on first mount
         _targetMenuWindow.SetVisible(true);           // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
-    // Framework.Update: re-assert the rect once the remount lands (see TickFavMenuPlace), and close the menu if the
-    // chat window itself went away (hotkey toggle / zone load) — the popup is its own window and would otherwise stay.
+    // Framework.Update: settle the rect from the live size once the remount lands (.PopupAnchor.cs), and close the menu
+    // if the chat window itself went away (hotkey toggle / zone load) — the popup is its own window and would otherwise stay.
     // The chat window is already shown whenever the menu opens (its chip was clicked), so !IsShown here really means
     // it closed (not the one-Update first-open lag, WindowBuilder-Patterns.md "IsShown is FALSE…").
     private void TickTargetMenu(float _)
     {
         if (!_targetMenuOpen) return;
         if (!_window.IsShown) { CloseTargetMenu(); return; }
-        if (!_targetMenuPlaced && _targetMenuWindow.IsShown) { _targetMenuWindow.SetRect(_targetMenuRect); _targetMenuPlaced = true; }
+        SettleAnchoredPopup(_targetMenuWindow, _targetMenuAnchor);
     }
 
     private void CloseTargetMenu()
     {
         if (!_targetMenuOpen) return;
         _targetMenuOpen = false;
-        _targetMenuPlaced = false;
         _targetMenuClosedAt = _services.Framework.TimeNow;
         _targetMenuWindow?.SetVisible(false);
     }

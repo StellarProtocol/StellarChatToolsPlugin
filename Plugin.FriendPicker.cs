@@ -6,9 +6,9 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// "+ New chat" friend picker (opened from the Whisper tab's conversation list, .WhisperList.cs). A cursor-positioned
-/// popup window — the sticker-menu pattern (Borderless + DismissOnOutsideClick, rect re-asserted once the hidden window
-/// remounts) — with a search field and the friend list from <see cref="IFriends.Friends"/>: online friends first, then
+/// "+ New chat" friend picker (opened from the Whisper tab's conversation list, .WhisperList.cs). A popup window
+/// anchored under the button (.PopupAnchor.cs) — the sticker-menu window pattern (Borderless + DismissOnOutsideClick,
+/// rect settled once the hidden window remounts) — with a search field and the friend list from <see cref="IFriends.Friends"/>: online friends first, then
 /// offline, each A→Z, every row [avatar] [name / "Lv.N · Online"]. Picking a friend opens a conversation in the game
 /// (<see cref="IFriends.CreatePrivateChat"/>, which also loads its newest history) and selects it. The visible list is a
 /// cached view rebuilt only when the friend list or the search text changes, so the per-refresh row Funcs never allocate.
@@ -24,8 +24,8 @@ public sealed partial class Plugin
     private const int    FriendAvatarSize = 28;
 
     private IWindowControl _friendPickerWindow = null!;
-    private bool _friendPickerOpen, _friendPickerPlaced;
-    private WindowRect _friendPickerRect;
+    private bool _friendPickerOpen;
+    private readonly AnchoredPopup _friendPickerAnchor = new(FriendPickerW, FriendPickerH, preferAbove: false);
 
     private string _friendFilter = string.Empty;
     private readonly List<FriendInfo> _friendView = new();
@@ -143,15 +143,15 @@ public sealed partial class Plugin
         _friendViewDirty = true;
     }
 
-    private void OpenFriendPicker()
+    // `button` = the "+ New chat" pill's screen rect. The picker drops BELOW it, left edges aligned (the button heads the
+    // conversation pane, so above would cover the window's own tabs), above it when there is no room below.
+    private void OpenFriendPicker(WindowRect button)
     {
         if (_friendPickerOpen) { CloseFriendPicker(); return; }
         CloseConvMenu();
         SetFriendFilter(string.Empty);
-        _friendPickerRect = CursorPopupRect(FriendPickerW, FriendPickerH);   // .WhisperList.cs
-        _friendPickerPlaced = false;
         _friendPickerOpen = true;
-        _friendPickerWindow.SetRect(_friendPickerRect);   // no-op while still unmounted; re-asserted in TickWhisperPopups
+        PlaceAnchoredPopup(_friendPickerWindow, _friendPickerAnchor, button);   // .PopupAnchor.cs; applied on first mount
         _friendPickerWindow.SetVisible(true);             // opens from hidden → remounts on top; no BringToFront (Rule 5)
     }
 
@@ -159,7 +159,6 @@ public sealed partial class Plugin
     {
         if (!_friendPickerOpen) return;
         _friendPickerOpen = false;
-        _friendPickerPlaced = false;
         _friendPickerWindow?.SetVisible(false);
     }
 
