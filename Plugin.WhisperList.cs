@@ -215,7 +215,9 @@ public sealed partial class Plugin
                 new TextElement(() => ConvPreview(k), MutedCol, NoWrap: true) { RichEmoji = true, Ellipsize = true },
             }, Gap: 1f), Width: ConvTextWidth),
         }, Gap: 6f),
-        OnClick: () => SelectPeer(ConvIdAt(k)))
+        // The row click took the keyboard from the composer (pointer-down selects the row) → hand it straight back, caret at
+        // the end of the draft. Re-request rather than a non-focus-stealing row: same FocusRequest path as an emoji pick.
+        OnClick: () => { SelectPeer(ConvIdAt(k)); FocusComposer(); })
     {
         Bare = true,
         OnHover = on => { if (on) _convHoverSlot = k; else if (_convHoverSlot == k) _convHoverSlot = -1; },
