@@ -167,13 +167,42 @@ public sealed partial class Plugin
 
     private static bool HasUnread(Conversation c) => c.LiveUnread > 0 || c.ServerUnread > 0;
 
+    // Local read mark now; the GAME's read mark (its unread badges) through RequestServerRead. Called on open, for a live
+    // whisper arriving while the conversation is on screen, and for an unread conversation found on screen — ALWAYS
+    // asking the game (not only when our own count was non-zero): a whisper read here while viewing never counted as
+    // unread locally, yet the game's maxReadMsgId stayed behind and its badge stayed lit.
     private void MarkConversationRead(Conversation c)
     {
-        bool had = HasUnread(c);
         c.LiveUnread = 0;
         c.ServerUnread = 0;
         if (c.LatestUtc > c.ReadMarkUtc) c.ReadMarkUtc = c.LatestUtc;
-        if (had) { try { _friends.MarkPrivateRead(c.CharId); } catch { /* queued action; never break the UI */ } }
+        RequestServerRead(c.CharId);
+    }
+
+    // Trailing ~1 s debounce per conversation: a burst of whispers is one server write, and by the time it runs the game
+    // has processed the message (its latestMsg is current). The framework action itself writes only while the game holds
+    // something unread (maxReadMsgId < latestMsg.msgId, read at run time) and refreshes the game's red dot + HUD badge.
+    private const float ServerReadDelaySec = 1f;
+    private readonly Dictionary<long, float> _serverReadDue = new();   // charId → IFramework.TimeNow when due
+    private List<long>? _serverReadRun;
+
+    private void RequestServerRead(long peer)
+    {
+        if (peer != 0 && !_serverReadDue.ContainsKey(peer)) _serverReadDue[peer] = _services.Framework.TimeNow + ServerReadDelaySec;
+    }
+
+    // From TickWhisper. World only: the RPC is a server write, and a failing one (< 1000) disconnects in the game's proxy.
+    private void RunDueServerReads()
+    {
+        if (_serverReadDue.Count == 0 || !InStableWorld()) return;   // .WhisperHistory.cs
+        var now = _services.Framework.TimeNow;
+        (_serverReadRun ??= new()).Clear();
+        foreach (var kv in _serverReadDue) if (now >= kv.Value) _serverReadRun.Add(kv.Key);
+        foreach (var peer in _serverReadRun)
+        {
+            _serverReadDue.Remove(peer);
+            try { _friends.MarkPrivateRead(peer); } catch { /* queued action; never break the UI */ }
+        }
     }
 
     // Whisper TAB dot: any conversation with unread, except the one currently on screen.
@@ -311,6 +340,7 @@ public sealed partial class Plugin
     {
         if (_selectedPeer != 0 && Conv(_selectedPeer) is { } c && HasUnread(c) && IsViewingConversation(_selectedPeer))
             MarkConversationRead(c);
+        RunDueServerReads();   // the game's read mark, debounced (above)
         TickWhisperPopups();   // .WhisperList.cs / .FriendPicker.cs — popup placement + close-with-window
     }
 }
