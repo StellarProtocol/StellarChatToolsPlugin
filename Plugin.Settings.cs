@@ -9,8 +9,8 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// The settings window (<c>chattools.settings</c>), toggled by the title-bar ⚙ of the chat window. A SEPARATE window,
 /// not a drawer inside <c>chattools.main</c>: the inline drawer squeezed the log and got messy in a short window, and
-/// the chat layout must never change when settings open. Content: auto-reply, translation (.Translate.cs), the
-/// quick-phrase editor, and the channel-colour hint.
+/// the chat layout must never change when settings open. Content: auto-reply, translation (.Translate.cs) and the
+/// channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
 ///
 /// Placement: re-centred over the chat window's CURRENT rect on EVERY open (clamped on-screen) — it reads as a sheet
 /// over the chat, so it should open where the chat is now, not wherever it was last dragged. While open it can be
@@ -25,14 +25,8 @@ public sealed partial class Plugin
 {
     private const string SettingsId = "chattools.settings";
     // Fixed width (GlassMenu non-resizable: width = DefaultRect.Width, height content-fits). 380 leaves the auto-reply
-    // row (56 label + 4 + 280 field) and the quick-phrase add row inside the 12+12 body padding.
+    // row (56 label + 4 + 280 field) inside the 12+12 body padding.
     private const float SettingsW = 380f;
-    // Quick phrases are the only unbounded section (up to MaxQuickPhrases rows). Up to this many the list is plain
-    // (window height fits content); past it the list moves into a fixed-height ScrollElement, which caps the whole
-    // window at ~650 units so it stays on-screen. ScrollElement has no "fit content up to a max" mode (its Height is a
-    // preferred/fixed viewport), so the cap is done by swapping branches instead of a framework change.
-    private const int QuickPlainMax = 6;
-    private const float QuickScrollH = 6 * 32f;   // ≈6 rows of 28 + 4 gap
     // The open's first layout can still be settling (first mount, or a parked tree whose content changed while hidden),
     // so the centre is re-applied whenever the measured height changes during this short window after an open.
     private const float SettingsSettleSec = 0.6f;
@@ -90,7 +84,7 @@ public sealed partial class Plugin
             if (Math.Abs(r.Height - _settingsCentredH) > 0.5f) PlaceSettings();
             return;
         }
-        // Content grew while open (auto-reply on, a phrase added): the window grows DOWN from its top edge, so keep the
+        // Content grew while open (auto-reply turned on): the window grows DOWN from its top edge, so keep the
         // bottom on-screen. Only writes when actually off the bottom (SetRect persists — no per-tick churn).
         float ch = CanvasH();
         if (r.Y + r.Height > ch + 0.5f && r.Y > 0.5f)
@@ -171,39 +165,9 @@ public sealed partial class Plugin
 
         new SeparatorElement(),
 
-        // Quick-phrase editor: list of phrase + remove, then an add row (Enter or the Add button). Plain while short,
-        // scrolled past QuickPlainMax (see the const) — two list instances, one per branch, over the same state.
-        new TextElement(() => _loc.T("chat.quick.title"), Emphasis: true),
-        new ConditionalElement(() => _quickPhrases.Count == 0,
-            new TextElement(() => _loc.T("chat.quick.empty"), () => _services.Theme.Colors.MenuMuted)),
-        new ConditionalElement(() => _quickPhrases.Count <= QuickPlainMax, BuildQuickEditor(),
-            new ScrollElement(BuildQuickEditor(), QuickScrollH) { FixedHeight = true }),
-        new RowElement(new HudElement[]
-        {
-            new InputElement(() => _quickEditText, s => { _quickEditText = s; AddQuickPhrase(); }, 260f, OnChange: s => _quickEditText = s),
-            new ButtonElement(() => _loc.T("chat.quick.add"), AddQuickPhrase),
-        }, Gap: 4f),
-
-        new SeparatorElement(),
-
         // Channel colours: the tab strip itself is the legend (each tab wears its channel's colour), so a swatch list
         // here would only repeat it. One hint pointing at where they are edited — the framework Theme settings
         // (IColorSlot is read-only to the plugin).
         new TextElement(() => _loc.T("chat.settings.colorsHint"), () => _services.Theme.Colors.MenuMuted),
     }, Gap: 4f);
-
-    private HudElement BuildQuickEditor()
-    {
-        var slots = new HudElement[MaxQuickPhrases];
-        for (int i = 0; i < MaxQuickPhrases; i++)
-        {
-            var idx = i;
-            slots[idx] = new RowElement(new HudElement[]
-            {
-                new CellElement(new TextElement(() => QuickPhrase(idx)), Weight: 1f),
-                new ButtonElement(() => _loc.T("chat.quick.remove"), () => RemoveQuickPhrase(idx)),
-            }, Gap: 4f);
-        }
-        return new ListElement(() => _quickPhrases.Count, slots);
-    }
 }

@@ -16,7 +16,6 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    private const int MaxQuickPhrases = 12;
     private const int MaxMessageLength = 140;   // mirrors the game's 0/140 counter; soft-capped on input
     private const int ComposerEmojiFontSize = 14;   // ☺ pill sprite: ≈14 wide, line box < the 20 pill strut
 
@@ -27,9 +26,6 @@ public sealed partial class Plugin
     // Bumped per emoji-picker click; the composer InputElement.FocusRequest polls it and refocuses the field (caret at
     // the end) on each change, so the user keeps typing after picking. Stickers send at once — they don't bump it.
     private int _composerFocusSeq;
-    private bool _quickOpen;
-    private string _quickEditText = string.Empty;
-    private List<string> _quickPhrases = new();   // user-configurable; populated by LoadConfig
 
     // Default the composer target to the opened read-tab's channel (overridable afterwards). In-memory only (not
     // persisted — only an explicit target-button click persists the default). Whisper mode lives ONLY in the Whisper
@@ -80,18 +76,11 @@ public sealed partial class Plugin
             // below the tab row's requirement, which wins.
             }, Gap: 4f) { ConstrainsWindowMinWidth = true },
 
-            // Quick-phrases popover: click a phrase to send it to the current target, then close.
+            // Quick-phrases popover (.QuickPhrases.cs): send / delete / reorder / add phrases.
             new ConditionalElement(() => _quickOpen, BuildQuickPopover()),
             // Sticker picker popover (.Stickers.cs) — sibling of the quick-phrase one; only one is open at a time.
             new ConditionalElement(() => _stickerOpen, BuildStickerPopover()),
         }, Gap: 4f);
-    }
-
-    // ＋ quick-phrase toggle — closes the sticker picker when it opens (mutually exclusive popovers).
-    private void ToggleQuickPhrases()
-    {
-        _quickOpen = !_quickOpen;
-        if (_quickOpen) _stickerOpen = false;
     }
 
     // ＋ / ☺ pill fill: the recessed track tint at rest (the tab strip's track), the accent pill while its popover is open.
@@ -123,25 +112,6 @@ public sealed partial class Plugin
         3 => ChatChannel.Guild,
         _ => ChatChannel.Whisper,
     };
-
-    private HudElement BuildQuickPopover()
-    {
-        var slots = new HudElement[MaxQuickPhrases];
-        for (int i = 0; i < MaxQuickPhrases; i++)
-        {
-            var idx = i;
-            // Close only on a real send — a phrase refused by the cooldown leaves the popover open to retry.
-            slots[idx] = new ButtonElement(() => QuickPhrase(idx), () => { if (SendPhrase(QuickPhrase(idx))) _quickOpen = false; });
-        }
-        return new PanelElement(new ColumnElement(new HudElement[]
-        {
-            new ConditionalElement(() => _quickPhrases.Count == 0,
-                new TextElement(() => _loc.T("chat.quick.empty"), () => _services.Theme.Colors.MenuMuted)),
-            new ListElement(() => _quickPhrases.Count, slots),
-        }, Gap: 2f));
-    }
-
-    private string QuickPhrase(int i) => i >= 0 && i < _quickPhrases.Count ? _quickPhrases[i] : "";
 
     // Resolve the current send target. Whisper goes to the selected conversation (.Whisper.cs); null means "cannot send"
     // (no conversation picked — the placeholder already says so), so the caller just no-ops.
@@ -183,21 +153,5 @@ public sealed partial class Plugin
         NoteSendDispatched(null);              // .SendCooldown.cs — a phrase never touches the draft
         JumpLogToBottom();   // .NewBelow.cs
         return true;
-    }
-
-    private void AddQuickPhrase()
-    {
-        var text = _quickEditText?.Trim();
-        if (string.IsNullOrEmpty(text) || _quickPhrases.Count >= MaxQuickPhrases) return;
-        _quickPhrases.Add(text);
-        _quickEditText = string.Empty;
-        SaveQuickPhrases();
-    }
-
-    private void RemoveQuickPhrase(int i)
-    {
-        if (i < 0 || i >= _quickPhrases.Count) return;
-        _quickPhrases.RemoveAt(i);
-        SaveQuickPhrases();
     }
 }
