@@ -18,6 +18,16 @@ public sealed partial class Plugin
 {
     private static string LegacyUid(long charId) => "c" + charId.ToString(CultureInfo.InvariantCulture);
 
+    // The UID read result for the LOG, without the ids: "<charId>:<showId>|<types>" → "<ids>|<types>" (the Lua types
+    // still show a nil/odd read); "err|<lua message>" and nil verbatim — that is what diagnoses a failed read.
+    private static string UidReadForLog(string? raw)
+    {
+        if (raw == null) return "<nil>";
+        if (raw.StartsWith("err|", System.StringComparison.Ordinal)) return raw;
+        int bar = raw.IndexOf('|');
+        return bar >= 0 ? "<ids>" + raw.Substring(bar) : "<ids>";
+    }
+
     // "<charId>:<showId>|<types>" → the showId, accepted only when that same record's charId is OURS (charBase can
     // still describe the previous character during a switch). "err|…", nil, or a mismatch → null (retry).
     private static string? ParseUid(string? raw, long me)

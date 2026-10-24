@@ -59,7 +59,7 @@ public sealed partial class Plugin
         var now = (double)_services.Framework.TimeNow;
         if (now - _lastNameCardAt < NameCardClickCooldown) return;
         _lastNameCardAt = now;
-        if (!_nameCardLogged) { _nameCardLogged = true; _services.Log.Info($"[ChatTools] open namecard charId={charId}"); }
+        if (!_nameCardLogged) { _nameCardLogged = true; _services.Log.Info("[ChatTools] open namecard (first this session)"); }
         // Invariant-culture integer literal: no float conversion, no locale digit grouping. charIds sit far below 2^53,
         // so the Lua number is exact. pcall keeps a Lua-side error from crossing the interop trampoline.
         var id = charId.ToString(CultureInfo.InvariantCulture);

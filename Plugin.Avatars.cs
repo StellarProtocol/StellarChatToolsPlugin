@@ -197,7 +197,7 @@ public sealed partial class Plugin
         {
             _inFlight.Remove(charId);
             _negative.Add(charId);
-            _services.Log.Warning($"[ChatTools] avatar {charId}: decode failed: {ex.Message}");
+            _services.Log.Warning($"[ChatTools] avatar: decode failed: {ex.Message}");
         }
     }
 
@@ -215,7 +215,7 @@ public sealed partial class Plugin
         catch (Exception ex)
         {
             _inFlight.Remove(charId);
-            _services.Log.Warning($"[ChatTools] avatar resolve request failed {charId}: {ex.Message}");
+            _services.Log.Warning($"[ChatTools] avatar resolve request failed: {ex.Message}");
         }
     }
 
@@ -230,7 +230,7 @@ public sealed partial class Plugin
         catch (Exception ex)
         {
             _inFlight.Remove(charId);
-            _services.Log.Warning($"[ChatTools] avatar url handling failed {charId}: {ex.Message}");
+            _services.Log.Warning($"[ChatTools] avatar url handling failed: {ex.Message}");
         }
     }
 
@@ -246,7 +246,7 @@ public sealed partial class Plugin
                 var bytes = await AvatarHttp.GetByteArrayAsync(url).ConfigureAwait(false);
                 if (!IsPng(bytes))
                 {
-                    _services.Log.Warning($"[ChatTools] avatar {charId}: not a PNG or too large ({bytes?.Length ?? 0} bytes)");
+                    _services.Log.Warning($"[ChatTools] avatar: not a PNG or too large ({bytes?.Length ?? 0} bytes)");
                     FailAvatar(charId);
                     return;
                 }
@@ -257,7 +257,7 @@ public sealed partial class Plugin
             }
             catch (Exception ex)
             {
-                _services.Log.Warning($"[ChatTools] avatar {charId}: download failed: {ex.Message}");
+                _services.Log.Warning($"[ChatTools] avatar: download failed: {ex.Message}");
                 FailAvatar(charId);
             }
         });

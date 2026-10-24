@@ -138,11 +138,11 @@ public sealed partial class Plugin
         }
         catch { /* Lua not usable yet — retry */ }
         // One line per login, so a failing read shows WHY (nil = the chunk never ran / the park was rejected).
-        if (!_uidLogged) { _uidLogged = true; _services.Log.Info($"[ChatTools] whisper history UID read: {raw ?? "<nil>"}"); }
+        if (!_uidLogged) { _uidLogged = true; _services.Log.Info($"[ChatTools] whisper history UID read: {UidReadForLog(raw)}"); }
         if (uid == null && now - _uidSince >= UidFallbackSec)
         {
             uid = LegacyUid(me);
-            _services.Log.Warning($"[ChatTools] whisper history UID never read (last: {raw ?? "<nil>"}); using the charId folder");
+            _services.Log.Warning($"[ChatTools] whisper history UID never read (last: {UidReadForLog(raw)}); using the charId folder");
         }
         if (uid == null) return;
         _services.Log.Info($"[ChatTools] whisper history folder: whisper.{uid}");
