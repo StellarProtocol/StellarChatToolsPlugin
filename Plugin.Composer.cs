@@ -153,22 +153,26 @@ public sealed partial class Plugin
         if (TrOutBusy() || _inputText.Length > MaxMessageLength) return;   // .TranslateOut.cs — translating / over the cap
         if (CoolingDown()) return;                 // .SendCooldown.cs
         if (ResolveTarget() is not { } target) return;
-        NoteSelfSend(SendChannel(), _inputText);   // .Bubbles.cs — learn our identity from the echo
-        _chat.Send(target, _inputText);            // game dispatcher — no packet construction, no local echo
-        NoteSendDispatched(_inputText);            // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
+        var text = _inputText;
+        // Game dispatcher — no packet construction, no local echo. A send that never left the client (no live connection)
+        // is reported before Send returns (.SendCooldown.cs TrySendNow): the draft is then KEPT, nothing below runs.
+        if (!TrySendNow(() => _chat.Send(target, text))) return;
+        NoteSelfSend(SendChannel(), text);         // .Bubbles.cs — learn our identity from the echo (it can't arrive during Send)
+        NoteSendDispatched(text);                  // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
         JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
         ResetTrOut();                              // .TranslateOut.cs — a send ends the translate status line
     }
 
-    // True when the phrase was actually sent (false: blank, no target, or the target is cooling down).
+    // True when the phrase was actually sent (false: blank, no target, the target is cooling down, or it never left the
+    // client — the popover then stays open for a retry).
     private bool SendPhrase(string phrase)
     {
         if (string.IsNullOrWhiteSpace(phrase)) return false;
         if (CoolingDown()) return false;       // .SendCooldown.cs
         if (ResolveTarget() is not { } target) return false;
+        if (!TrySendNow(() => _chat.Send(target, phrase))) return false;   // .SendCooldown.cs
         NoteSelfSend(SendChannel(), phrase);   // .Bubbles.cs
-        _chat.Send(target, phrase);
         NoteSendDispatched(null);              // .SendCooldown.cs — a phrase never touches the draft
         JumpLogToBottom();   // .NewBelow.cs
         return true;

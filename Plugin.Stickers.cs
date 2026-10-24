@@ -162,7 +162,7 @@ public sealed partial class Plugin
         // Cooling-down target (.SendCooldown.cs): refuse like text and keep the picker open, so the user can retry once
         // the Send pill's countdown ends.
         if (CoolingDown()) return;
-        SendSticker(id);
+        if (!SendSticker(id)) return;   // never left the client (.SendCooldown.cs): keep the picker open to retry
         _stickerOpen = false;   // close on pick, like the quick-phrase popover
         CloseFavMenu();
     }
@@ -171,15 +171,17 @@ public sealed partial class Plugin
     // no-op, exactly like text (DoSend). We DO note the send (by sticker id, not text — a sticker carries none): the
     // echoed inbound copy carries back the same StickerId, so this teaches self-identity even on a fresh/solo session
     // that hasn't sent any text yet (otherwise our own sticker renders left until the first text send). See
-    // NoteSelfSendSticker / LearnSelfFromEcho (Plugin.Bubbles.cs).
-    private void SendSticker(int configId)
+    // NoteSelfSendSticker / LearnSelfFromEcho (Plugin.Bubbles.cs). Returns false only when the send never left the
+    // client (.SendCooldown.cs TrySendNow) — a cooldown / no-target no-op still returns true (the picker closes as before).
+    private bool SendSticker(int configId)
     {
-        if (CoolingDown()) return;   // .SendCooldown.cs — stickers share the channel's cooldown with text
-        if (ResolveTarget() is not { } target) return;
+        if (CoolingDown()) return true;   // .SendCooldown.cs — stickers share the channel's cooldown with text
+        if (ResolveTarget() is not { } target) return true;
+        if (!TrySendNow(() => _chat.SendSticker(target, configId))) return false;
         NoteSelfSendSticker(SendChannel(), configId);   // .Bubbles.cs — learn our identity from the sticker echo
-        _chat.SendSticker(target, configId);
         NoteSendDispatched(null);   // .SendCooldown.cs — no draft to restore for a sticker
         JumpLogToBottom();   // .NewBelow.cs — own send: follow it to the bottom
+        return true;
     }
 
     private HudElement BuildStickerPopover() => new PanelElement(new ColumnElement(new HudElement[]

@@ -15,7 +15,8 @@ namespace Stellar.ChatTools;
 /// <see cref="ChatSendResult.ErrorTooFrequent"/>) flashes a short notice on the Send pill and puts the cleared draft back.
 /// While the current target is blocked, every send path to it is refused with the draft kept: Enter / Send
 /// (<see cref="DoSend"/>), quick phrases (<see cref="SendPhrase"/>) and stickers (<see cref="SendSticker"/>). No learned
-/// timing — the lengths come from the server, the local timeouts below are fixed (Session Rule 12).
+/// timing — the lengths come from the server, the local timeouts below are fixed (Session Rule 12). A send that never
+/// left the client (<see cref="ChatSendResult.ErrorNotSent"/>) keeps its draft — see <see cref="TrySendNow"/>.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -82,24 +83,65 @@ public sealed partial class Plugin
     private void OnSendResult(ChatSendResult r)
     {
         if (!r.ViaFramework) return;
+        if (r.ErrorCode == ChatSendResult.ErrorNotSent) { OnNotSentResult(r); return; }
         _awaitingReplyUntil.Remove(r.Channel);   // the server's verdict is in: its cooldown (if any) governs now
-        bool ours = _sentDraft != null && r.Channel == _sentDraftChannel;
         if (r.Ok)
         {
-            if (ours) _sentDraft = null;
+            if (_sentDraft != null && r.Channel == _sentDraftChannel) _sentDraft = null;
             return;
         }
-        var now = _services.Framework.TimeNow;
-        _refusedUntil = now + RefusedFlashSec;
+        _refusedUntil = _services.Framework.TimeNow + RefusedFlashSec;
         _refusedTooFast = r.ErrorCode == ChatSendResult.ErrorTooFrequent;
-        // Put the optimistically-cleared draft back — unless the user has already started typing a new one.
-        if (ours && now - _sentDraftAt <= DraftRestoreWindowSec && _inputText.Length == 0)
+        RestoreSentDraft(r.Channel);
+    }
+
+    // Put the optimistically-cleared draft back — unless the user has already started typing a new one.
+    private void RestoreSentDraft(ChatChannel channel)
+    {
+        bool ours = _sentDraft != null && channel == _sentDraftChannel;
+        if (ours && _services.Framework.TimeNow - _sentDraftAt <= DraftRestoreWindowSec && _inputText.Length == 0)
         {
             _inputText = _sentDraft!;   // FieldBinding re-seeds the field from Get() on the next poll
             _composerFocusSeq++;        // and hand the keyboard back to it (caret at the end)
         }
         _sentDraft = null;
     }
+
+    // ── Local send failure (framework ChatSendResult.ErrorNotSent) ─────────────────────────────────────────────────
+    // A send that never left the client (no live chat connection, the framework refused the target, it threw) is NOT a
+    // server refusal: no reply and no cooldown follow. The framework reports it BEFORE IChat.Send returns when called on
+    // the main thread (always, for us), so every send path wraps its call in TrySendNow and, on failure, keeps the draft /
+    // popover instead of clearing it. Server refusals (ErrorTooFrequent etc.) keep their own path above. On a framework
+    // that predates ErrorNotSent the result never comes and TrySendNow always reports success = the old behaviour.
+    private bool _sendInProgress;    // inside TrySendNow's IChat call
+    private bool _localSendFailed;   // ErrorNotSent arrived during that call
+
+    // Runs one IChat send. True = it left the client (the server's verdict may still refuse it, via OnSendResult).
+    private bool TrySendNow(Action send)
+    {
+        _localSendFailed = false;
+        _sendInProgress = true;
+        try { send(); }
+        finally { _sendInProgress = false; }
+        if (!_localSendFailed) return true;
+        _localSendFailed = false;
+        OnLocalSendFailed();
+        return false;
+    }
+
+    private void OnNotSentResult(ChatSendResult r)
+    {
+        if (_sendInProgress) { _localSendFailed = true; return; }   // TrySendNow sees it before anything was cleared
+        // Reported late (a send made before the framework's first drain is queued): undo like a refusal, minus the
+        // server-refusal flash — the notice for this case is OnLocalSendFailed's.
+        _awaitingReplyUntil.Remove(r.Channel);
+        RestoreSentDraft(r.Channel);
+        OnLocalSendFailed();
+    }
+
+    // Hook for the "message not sent" notice (its UI is being prototyped separately — Session Rule 14; it attaches here).
+    // Deliberately empty for now: the only behaviour change is that the draft / picker / phrase popover is kept.
+    private void OnLocalSendFailed() { }
 
     private bool RefusedFlashing() => _refusedUntil >= 0f && _services.Framework.TimeNow < _refusedUntil;
 
