@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "Message {0}…",
   "chat.composer.tooFast": "Too fast",
   "chat.cooldown": "Cooldown: {0:0}s per sender",
+  "chat.date.today": "Today",
+  "chat.date.yesterday": "Yesterday",
   "chat.friends.empty": "Your friend list is empty",
   "chat.friends.noMatch": "No matching friends",
   "chat.friends.offline": "Offline",

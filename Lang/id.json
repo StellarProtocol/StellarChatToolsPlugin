@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "Kirim pesan ke {0}…",
   "chat.composer.tooFast": "Terlalu cepat",
   "chat.cooldown": "Cooldown: {0:0}d per pengirim",
+  "chat.date.today": "Hari ini",
+  "chat.date.yesterday": "Kemarin",
   "chat.friends.empty": "Daftar temanmu kosong",
   "chat.friends.noMatch": "Tidak ada teman yang cocok",
   "chat.friends.offline": "Offline",

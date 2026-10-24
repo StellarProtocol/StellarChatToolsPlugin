@@ -78,11 +78,13 @@ public sealed partial class Plugin
         // consecutive rows. The bubble still HUGS — it lives in the inner RowElement (BuildBubbleRow), NOT as a
         // direct child of this Column (which force-expands child width). Applied once here so it covers BOTH the
         // self and other branches identically. The OUTER Cond picks the compact system-notice line (.SystemNotice.cs)
-        // over any bubble — a whole-row switch, never inside a bubble's measured child.
+        // over any bubble — a whole-row switch, never inside a bubble's measured child. Outermost of all: the local-only
+        // date separator (.DateSeparators.cs), a System row too, so it must be picked before the notice branch.
         => new ColumnElement(new HudElement[]
         {
+            new ConditionalElement(() => IsDateSepRow(i), BuildDateSepRow(i),
             new ConditionalElement(() => IsNoticeRow(i), MessageRightClickTarget(BuildNoticeRow(i), i),   // right-click = message menu (.MessageMenu.cs)
-                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false))),
+                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false)))),
             new SpacerElement(Height: BubbleRowGap),
         });
 

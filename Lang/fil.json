@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "Magmensahe sa {0}…",
   "chat.composer.tooFast": "Masyadong mabilis",
   "chat.cooldown": "Cooldown: {0:0}s bawat nagpadala",
+  "chat.date.today": "Ngayon",
+  "chat.date.yesterday": "Kahapon",
   "chat.friends.empty": "Walang laman ang listahan ng kaibigan mo",
   "chat.friends.noMatch": "Walang tugmang kaibigan",
   "chat.friends.offline": "Offline",

@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "{0}にメッセージを送信…",
   "chat.composer.tooFast": "送信が早すぎます",
   "chat.cooldown": "クールダウン: 送信者ごとに{0:0}秒",
+  "chat.date.today": "今日",
+  "chat.date.yesterday": "昨日",
   "chat.friends.empty": "フレンドリストは空です",
   "chat.friends.noMatch": "一致するフレンドがいません",
   "chat.friends.offline": "オフライン",

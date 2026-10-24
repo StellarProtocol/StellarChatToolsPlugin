@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "{0}에 메시지 보내기…",
   "chat.composer.tooFast": "너무 빠릅니다",
   "chat.cooldown": "쿨타임: 발신자당 {0:0}초",
+  "chat.date.today": "오늘",
+  "chat.date.yesterday": "어제",
   "chat.friends.empty": "친구 목록이 비어 있습니다",
   "chat.friends.noMatch": "일치하는 친구가 없습니다",
   "chat.friends.offline": "오프라인",

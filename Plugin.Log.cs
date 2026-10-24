@@ -137,6 +137,7 @@ public sealed partial class Plugin
     // each frame) and defensively from the slot accessors, so every accessor sees the same list within a frame.
     private void EnsureFiltered()
     {
+        TickDateSepClock();   // .DateSeparators.cs — a local-date change marks the view dirty (rebuilt just below)
         if (_activeTab == _lastFilterTab && _selectedPeer == _lastFilterPeer && !_logDirty)
         {
             if (_pendingAppend.Count == 0 || TryAppendPending()) return;
@@ -168,7 +169,7 @@ public sealed partial class Plugin
         if (peer > 0) ordered = MergeSavedWhispers(peer, ordered);
         MergeLocalNotices(ordered);   // .LocalNotice.cs — this view's local-only lines (e.g. "message not sent")
         _filtered.Clear();
-        _filtered.AddRange(ordered);
+        AddWithDateSeparators(ordered);   // .DateSeparators.cs — local-only day rows between days + above a non-today top
 
         _lastFilterTab = _activeTab;
         _lastFilterPeer = _selectedPeer;
@@ -220,10 +221,10 @@ public sealed partial class Plugin
         {
             if (!PassesFilter(cm, ch, peer)) continue;
             if (_filtered.Count > 0 && cm.Timestamp < _filtered[^1].Timestamp) return false;   // not the newest → re-sort
-            _filtered.Add(cm);
+            AppendWithDateSeparator(cm);   // .DateSeparators.cs — crossing a day boundary adds the separator first
         }
         _pendingAppend.Clear();
-        if (_filtered.Count > LogTrimAt) _filtered.RemoveRange(0, LogTrimChunk);
+        if (_filtered.Count > LogTrimAt) TrimLogFront();   // .DateSeparators.cs — LogTrimChunk rows, header kept
         return true;
     }
 

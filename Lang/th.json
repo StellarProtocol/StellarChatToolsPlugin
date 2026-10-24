@@ -13,6 +13,8 @@
   "chat.composer.placeholder": "ส่งข้อความถึง{0}…",
   "chat.composer.tooFast": "ส่งเร็วเกินไป",
   "chat.cooldown": "คูลดาวน์: {0:0} วินาทีต่อผู้ส่ง",
+  "chat.date.today": "วันนี้",
+  "chat.date.yesterday": "เมื่อวาน",
   "chat.friends.empty": "รายชื่อเพื่อนของคุณว่างเปล่า",
   "chat.friends.noMatch": "ไม่พบเพื่อนที่ตรงกัน",
   "chat.friends.offline": "ออฟไลน์",
