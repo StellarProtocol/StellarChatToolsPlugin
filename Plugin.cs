@@ -155,6 +155,7 @@ public sealed partial class Plugin : IStellarPlugin
         _convMenuWindow?.Remove();
         _friendPickerWindow?.Remove();
         _settingsWindow?.Remove();
+        _msgMenuWindow?.Remove();
         _trOutMenuWindow?.Remove();
         DisposeAvatars();   // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
     }
