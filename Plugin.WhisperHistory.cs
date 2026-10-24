@@ -19,7 +19,8 @@ namespace Stellar.ChatTools;
 ///
 /// Folder key = the in-game UID the HUD shows (<c>CharSerialize.charBase.showId</c>, one Lua read per login, accepted only
 /// when that same record's charId is OURS — charBase can still hold the previous character during a switch). If it never
-/// reads, the key falls back to <c>c&lt;charId&gt;</c> after <see cref="UidFallbackSec"/>.
+/// reads, the key falls back to <c>c&lt;charId&gt;</c> after <see cref="UidFallbackSec"/>. The next login that does read the UID merges
+/// that fallback folder into the UID one (.WhisperHistory.Migrate.cs), so one character never keeps two histories.
 ///
 /// Threading: all state below is main-thread. Every disk touch runs on ONE chained background task (<see cref="_histIo"/>,
 /// so writes land in order and a clear can't race a flush), and results come back through IFramework.Post. Nothing here
@@ -50,6 +51,7 @@ public sealed partial class Plugin
     private int _histGen;                     // bumped on clear / character change → late I/O results are dropped
     private bool _histIndexLoaded, _histIndexDirty, _histAnyDirty;
     private float _histFlushAt, _uidNextTry, _uidSince;
+    private bool _uidLogged;                  // the first UID read result of this login is logged (diagnostics)
     private int _histStatsRev;                // bumped on any count change (Settings stats cache)
     private Task _histIo = Task.CompletedTask;
 
@@ -79,6 +81,7 @@ public sealed partial class Plugin
             _histChar = me;
             _uidSince = now;
             _uidNextTry = 0f;
+            _uidLogged = false;
         }
         if (me == 0) return;
         if (_histKey == null) { TryResolveHistoryKey(me, now); return; }
@@ -107,26 +110,34 @@ public sealed partial class Plugin
         if (now < _uidNextTry) return;
         _uidNextTry = now + UidRetrySec;
         string? uid = null;
+        string? raw = null;
         try
         {
-            {
-                // "<charId>:<showId>" from the record the game's own UID labels read; integers printed exactly.
-                _services.Lua.DoString(
-                    "pcall(function() " + UidGlobal + "=nil " +
-                    "local function s(v) if math.type and math.type(v)=='integer' then return tostring(v) " +
-                    "elseif type(v)=='number' then return string.format('%.0f',v) end return tostring(v) end " +
-                    "local b=Z.ContainerMgr.CharSerialize.charBase " +
-                    UidGlobal + "=s(b.charId)..':'..s(b.showId) end)");
-                var raw = _services.Lua.ReadGlobalString(UidGlobal);
-                int colon = raw?.IndexOf(':') ?? -1;
-                if (colon > 0
-                    && long.TryParse(raw!.AsSpan(0, colon), NumberStyles.None, CultureInfo.InvariantCulture, out var cid) && cid == me
-                    && long.TryParse(raw.AsSpan(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var show) && show > 0)
-                    uid = show.ToString(CultureInfo.InvariantCulture);
-            }
+            // "<charId>:<showId>|<type>,<type>" from the record the game's own UID labels read (fighterbtns_view
+            // refreshPlayerInfo: CharSerialize.charBase.showId); integers printed exactly. A failure parks "err|<msg>".
+            // ⚠️ rawset, never `X=…`: the game's strict _G guard REJECTS writes to undeclared globals. The old plain
+            // assignment (first statement inside the pcall) would error on every try, so nothing ever landed and the
+            // key fell back to c<charId> — the likely cause of the failed read; the log line below confirms it in game
+            // (Lua-Injection-from-CSharp.md "_G strict-global guard").
+            _services.Lua.DoString(
+                "rawset(_G,'" + UidGlobal + "',nil) " +
+                "local ok,r=pcall(function() " +
+                "local function s(v) if math.type and math.type(v)=='integer' then return tostring(v) " +
+                "elseif type(v)=='number' then return string.format('%.0f',v) end return tostring(v) end " +
+                "local b=Z.ContainerMgr.CharSerialize.charBase " +
+                "return s(b.charId)..':'..s(b.showId)..'|'..type(b.charId)..','..type(b.showId) end) " +
+                "rawset(_G,'" + UidGlobal + "',ok and r or ('err|'..tostring(r)))");
+            raw = _services.Lua.ReadGlobalString(UidGlobal);
+            uid = ParseUid(raw, me);
         }
         catch { /* Lua not usable yet — retry */ }
-        if (uid == null && now - _uidSince >= UidFallbackSec) uid = "c" + me.ToString(CultureInfo.InvariantCulture);
+        // One line per login, so a failing read shows WHY (nil = the chunk never ran / the park was rejected).
+        if (!_uidLogged) { _uidLogged = true; _services.Log.Info($"[ChatTools] whisper history UID read: {raw ?? "<nil>"}"); }
+        if (uid == null && now - _uidSince >= UidFallbackSec)
+        {
+            uid = LegacyUid(me);
+            _services.Log.Warning($"[ChatTools] whisper history UID never read (last: {raw ?? "<nil>"}); using the charId folder");
+        }
         if (uid == null) return;
         _services.Log.Info($"[ChatTools] whisper history folder: whisper.{uid}");
         SetHistoryKey("whisper." + uid);
@@ -136,8 +147,14 @@ public sealed partial class Plugin
     {
         _histKey = key;
         int gen = _histGen;
+        // A UID key absorbs this character's charId-fallback folder first (.WhisperHistory.Migrate.cs), on the same
+        // worker chain, so the index read below — and every peer load queued after it — already sees the merged files.
+        var legacy = "whisper." + LegacyUid(_histChar);
+        string charName = SelfName() ?? "";
+        bool migrate = _histChar != 0 && !string.Equals(key, legacy, StringComparison.Ordinal);
         HistIo(() =>
         {
+            if (migrate) MigrateLegacyFolder(legacy, key, charName);
             var list = WhisperHistoryFormat.ReadIndex(_services.Data.Read(IndexFile(key)));
             _services.Framework.Post(() => OnIndexLoaded(gen, list));
         });
