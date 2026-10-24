@@ -65,7 +65,8 @@ public sealed partial class Plugin
                 // chat emoji <sprite=1> through the RichEmoji TMP path — the same tag + path as the picker's emoji tab icon
                 // (.Emoji.cs), colour by nature, so it reads on the dark pill. FontSize sizes the sprite to the 16 slot and
                 // keeps its line box under the 20 strut (TMP honours FontSize on this surface, unlike plain Text).
-                BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true },
+                // CenterGlyphs: centre the drawn sprite, not the baseline-anchored line box (see BuildEmojiTabIcon).
+                BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
                     () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
                     { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder }, Weight: 1f),

@@ -48,9 +48,12 @@ public sealed partial class Plugin
     }
 
     // The emoji tab's icon: a RichEmoji <sprite=1>, centred like the texture tabs (icon-only, no localized label).
+    // CenterGlyphs (TMP Midline) centres the drawn picture: a sprite sits on the text BASELINE, so default line-box
+    // centring drew it visibly higher than the PNG tab icons. Same on the grid cells and the composer ☺ button —
+    // NOT on chat bubbles, where emoji share the baseline with the surrounding text.
     private HudElement BuildEmojiTabIcon() => new RowElement(new HudElement[]
     {
-        new TextElement(() => EmojiTags[0], FontSize: EmojiTabFontSize, NoWrap: true) { RichEmoji = true },
+        new TextElement(() => EmojiTags[0], FontSize: EmojiTabFontSize, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
     }, Justify: RowJustify.Center);
 
     // Fixed 63-cell grid of RichEmoji texts. Each tag is centred in a RowElement (same anti-squish wrapper as the sticker
@@ -64,7 +67,7 @@ public sealed partial class Plugin
             slots[idx] = new SelectableElement(
                 new RowElement(new HudElement[]
                 {
-                    new TextElement(() => EmojiTags[idx], FontSize: EmojiFontSize, NoWrap: true) { RichEmoji = true },
+                    new TextElement(() => EmojiTags[idx], FontSize: EmojiFontSize, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
                 }, Justify: RowJustify.Center),
                 OnClick: () => OnPickEmoji(idx));
         }
