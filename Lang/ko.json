@@ -114,7 +114,7 @@
   "chat.translate.failed": "번역 실패 · 클릭하여 다시 시도",
   "chat.translate.hoverToggle": "마우스를 올리면 번역 버튼 표시",
   "chat.translate.privacy": "메시지는 버튼을 클릭할 때만 Google 번역으로 전송됩니다.",
-  "chat.translate.tag": "번역됨 · {0} → {1}",
+  "chat.translate.tag": "{0}에서 {1}(으)로 번역됨",
   "chat.translate.targetLabel": "번역 언어",
   "chat.translate.title": "번역",
   "chat.translate.translating": "번역 중",

@@ -114,7 +114,7 @@
   "chat.translate.failed": "Hindi naisalin · i-click para subukang muli",
   "chat.translate.hoverToggle": "Ipakita ang button na isalin kapag itinapat ang cursor",
   "chat.translate.privacy": "Ipinapadala lang ang mensahe sa Google Translate kapag pinindot mo ang button.",
-  "chat.translate.tag": "Isinalin · {0} → {1}",
+  "chat.translate.tag": "Isinalin mula sa {0} papunta sa {1}",
   "chat.translate.targetLabel": "Isalin sa",
   "chat.translate.title": "Pagsasalin",
   "chat.translate.translating": "Isinasalin",

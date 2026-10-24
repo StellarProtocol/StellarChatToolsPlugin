@@ -210,7 +210,8 @@ public sealed partial class Plugin
         }
     }
 
-    // "Translated · Thai → English" / "Already in English", cached per entry per UI language.
+    // "Translated from Thai to English" / "Already in English", cached per entry per UI language. No arrow glyph:
+    // the game/menu fonts have no "→", so it rendered as a gap ("Translated · Thai  English").
     private string TrTag(TrEntry e)
     {
         if (e.Tag != null && string.Equals(e.TagLang, _loc.Language, StringComparison.Ordinal)) return e.Tag;

@@ -114,7 +114,7 @@
   "chat.translate.failed": "翻訳に失敗しました · クリックで再試行",
   "chat.translate.hoverToggle": "マウスを乗せたときに翻訳ボタンを表示",
   "chat.translate.privacy": "メッセージはボタンをクリックしたときだけGoogle翻訳に送信されます。",
-  "chat.translate.tag": "翻訳済み · {0} → {1}",
+  "chat.translate.tag": "{0}から{1}に翻訳済み",
   "chat.translate.targetLabel": "翻訳先",
   "chat.translate.title": "翻訳",
   "chat.translate.translating": "翻訳中",

@@ -114,7 +114,7 @@
   "chat.translate.failed": "Gagal menerjemahkan · klik untuk mencoba lagi",
   "chat.translate.hoverToggle": "Tampilkan tombol terjemahan saat kursor di atas pesan",
   "chat.translate.privacy": "Pesan hanya dikirim ke Google Terjemahan saat Anda mengeklik tombolnya.",
-  "chat.translate.tag": "Diterjemahkan · {0} → {1}",
+  "chat.translate.tag": "Diterjemahkan dari bahasa {0} ke bahasa {1}",
   "chat.translate.targetLabel": "Terjemahkan ke",
   "chat.translate.title": "Terjemahan",
   "chat.translate.translating": "Menerjemahkan",

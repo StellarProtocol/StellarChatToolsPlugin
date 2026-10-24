@@ -164,7 +164,7 @@ public sealed partial class Plugin
         Width: ComposerControlSize);
 
     // Translate-branch body: the (translated / dimmed original) text + one small status line —
-    // "文A Translating…" / "文A Translated · Thai → English" / "文A Translation failed · click to retry". Both are constant
+    // "文A Translating…" / "文A Translated from Thai to English" / "文A Translation failed · click to retry". Both are constant
     // elements whose TEXT changes (no Cond inside the bubble). The icon is its own TMP text so a CJK glyph never shares
     // a string with Thai (one TMP face per string); the line is NoWrap like the whisper tag.
     private HudElement BuildTranslatedBody(int i) => new ColumnElement(new HudElement[]
