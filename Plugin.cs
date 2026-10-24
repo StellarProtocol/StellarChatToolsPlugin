@@ -182,10 +182,13 @@ public sealed partial class Plugin : IStellarPlugin
         _window.SetVisible(false);
     }
 
-    // World entry → start hidden. No FlushHistory here: the logout path already flushed, and at this edge _histKey may
-    // still name the PREVIOUS character while SelfName() already returns the new one (would mislabel its index).
+    // Leaving World (logout / character switch) → flush + drop everything per-character (.CharacterSwitch.cs). This is
+    // the edge to flush on: the framework raises it before clearing the player record, so _histKey and SelfName() still
+    // describe the outgoing character. World entry → start hidden. No FlushHistory there: the leave edge already
+    // flushed, and at the entry edge SelfName() may already return the new character (would mislabel an index).
     private void OnPhaseChanged(PhaseChange change)
     {
+        if (change.From == GamePhase.World && change.To != GamePhase.World) ResetCharacterState(cutLog: true);
         if (change.To == GamePhase.World && change.From != GamePhase.World) HideChat();
     }
 

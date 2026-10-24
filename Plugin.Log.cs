@@ -141,7 +141,8 @@ public sealed partial class Plugin
         // until a conversation is picked.
         long peer = _activeTab == ChatTab.Whisper ? _selectedPeer : -1;
         var m = _chat.RecentMessages;
-        for (int i = 0; i < m.Count; i++)
+        // The framework ring outlives a logout: skip the previous character's messages (.CharacterSwitch.cs).
+        for (int i = LogStartIndex(m); i < m.Count; i++)
         {
             var cm = m[i];
             if (IsUnrenderable(cm)) continue;                     // drop un-decodable special-type leftovers on EVERY tab (incl. All)

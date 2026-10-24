@@ -41,7 +41,7 @@ public sealed partial class Plugin
         if (!_friendViewDirty) return _friendView;
         _friendView.Clear();
         var q = _friendFilter.Trim();
-        foreach (var f in _friends.Friends)
+        foreach (var f in FriendSource())   // .CharacterSwitch.cs — empty while a reset waits for the new lists
         {
             if (q.Length > 0
                 && f.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0
@@ -82,7 +82,7 @@ public sealed partial class Plugin
     }
 
     private string FriendEmptyHint()
-        => _loc.T(_friends.Friends.Count == 0 ? "chat.friends.empty" : "chat.friends.noMatch");
+        => _loc.T(FriendSource().Count == 0 ? "chat.friends.empty" : "chat.friends.noMatch");
 
     private IWindowControl RegisterFriendPickerWindow()
     {

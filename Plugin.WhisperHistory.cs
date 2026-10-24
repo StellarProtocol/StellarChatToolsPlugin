@@ -74,6 +74,7 @@ public sealed partial class Plugin
         try { me = _services.PlayerState.CharId; } catch { /* identity not ready */ }
         float now = _services.Framework.TimeNow;
         TickHistoryConfirm(now);   // .WhisperHistory.Settings.cs — the clear button's 5 s confirm timeout
+        TickCharacterSwitch(me);   // .CharacterSwitch.cs — fallback reset when the charId changed with no logout edge
         if (me != _histChar)
         {
             FlushHistory();

@@ -94,6 +94,7 @@ public sealed partial class Plugin
     // IFriends.Changed (main thread): refresh the friend map, then merge the game's conversation list.
     private void OnFriendsChanged()
     {
+        _friendsRemergePending = false;   // .CharacterSwitch.cs — a fresh poll (or the timer) has merged the new lists
         try
         {
             _friendById.Clear();
@@ -263,7 +264,7 @@ public sealed partial class Plugin
     {
         var m = _chat.RecentMessages;
         int n = 0;
-        for (int i = 0; i < m.Count; i++)
+        for (int i = LogStartIndex(m); i < m.Count; i++)   // .CharacterSwitch.cs — not the previous character's
             if (m[i].Channel == ChatChannel.Whisper && PeerOf(m[i]) == peer) n++;
         return n;
     }
@@ -306,6 +307,7 @@ public sealed partial class Plugin
     {
         if (_selectedPeer != 0 && Conv(_selectedPeer) is { } c && HasUnread(c) && IsViewingConversation(_selectedPeer))
             MarkConversationRead(c);
+        TickFriendsRemerge();  // .CharacterSwitch.cs — refill the list for the new character after a reset
         TickWhisperPopups();   // .WhisperList.cs / .FriendPicker.cs — popup placement + close-with-window
     }
 }
