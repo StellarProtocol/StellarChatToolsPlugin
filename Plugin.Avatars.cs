@@ -190,9 +190,26 @@ public sealed partial class Plugin
                && (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency < AvatarDecodeBudgetMs)
         {
             var (id, bytes, src) = _decodeQueue.Dequeue();
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             DecodeQueued(id, bytes, src);
+            NoteAvatarDecodeCost(t0);
             done++;
         }
+    }
+
+    // [Hitch] bucket `ct:avatarDecode` (diagnostics only) + a session-max readout: one Info line each time the slowest
+    // single decode so far grows by ≥50% (bounded to a handful per session), so an in-game run shows the bake cost.
+    private double _avatarDecodeMaxMs;
+    private int _avatarDecodes;
+
+    private void NoteAvatarDecodeCost(long t0)
+    {
+        Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:avatarDecode", Stellar.Abstractions.Diagnostics.HitchProbe.IsEnabled ? t0 : 0L);
+        double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        _avatarDecodes++;
+        if (ms < 2.0 || ms < _avatarDecodeMaxMs * 1.5) { if (ms > _avatarDecodeMaxMs) _avatarDecodeMaxMs = ms; return; }
+        _avatarDecodeMaxMs = ms;
+        _services.Log.Info($"[ChatTools] avatar decode: slowest so far {ms:0.0} ms (decode #{_avatarDecodes})");
     }
 
     // One budgeted decode. Success → LRU (a refresh REPLACES the photo on show — LruInsert frees the old texture) +

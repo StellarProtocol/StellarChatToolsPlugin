@@ -1,3 +1,5 @@
+using System;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
 namespace Stellar.ChatTools;
@@ -42,11 +44,16 @@ public sealed partial class Plugin
     private Texture2D BakeRoundedAvatar(Texture2D src)
     {
         int w = src.width, h = src.height;
-        // ⚠️ MUST be an explicit managed Color32[]: the interop GetPixels32 returns Il2CppStructArray<Color32>, and
-        // passing THAT to RoundCorner(Color32[]) runs Il2CppArrayBase<T>'s implicit T[] operator — a fresh COPY per
-        // call. The corner alpha was written into four throwaway copies and SetPixels32 uploaded the untouched
-        // original → square corners whatever the format. Convert once here; SetPixels32(px) copies it back in.
-        Color32[] px = src.GetPixels32();
+        // ⚠️ PERF + correctness: edit the IL2CPP pixel array IN PLACE through ONE Span, never a managed Color32[].
+        //   • Il2CppArrayBase<T>'s implicit T[] operator copies element-by-element through the indexer, and EVERY
+        //     Il2CppStructArray<T>[i] re-runs AsSpan() = an il2cpp_array_length P/Invoke + a GC-handle Pointer read.
+        //     That is several native calls PER PIXEL: ~20 ms for a 300×300 photo, hundreds of ms for a big custom
+        //     one — inside the decode tick, i.e. the 125–435 ms `stellar.chattools` [Hitch] spikes (2026-10-24).
+        //   • The span is a view of the native buffer, so RoundCorner's writes land in `il2px` itself and
+        //     SetPixels32(il2px) uploads them with no copy back. (The older bug — four throwaway T[] copies, square
+        //     corners — came from converting per RoundCorner call; a single in-place view can't repeat it.)
+        Il2CppStructArray<Color32> il2px = src.GetPixels32();
+        Span<Color32> px = il2px.AsSpan();   // valid while il2px is alive (held in this frame)
         var srcFormat = src.format;
         var dst = src;
         // Bake into an explicit RGBA32 texture whenever LoadImage re-formatted it (RGB24 has no alpha; ARGB32 does,
@@ -67,7 +74,7 @@ public sealed partial class Plugin
             RoundCorner(px, w, 0,     h - r, rPx,           (h - 1) - rPx, rPx, r);   // top-left
             RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
         }
-        dst.SetPixels32(px);
+        dst.SetPixels32(il2px);   // same native array the span edited — no managed→IL2CPP conversion
         if (!_loggedAvatarFormat)
         {
             // One-shot proof the bake reached the texture: read the corner back from the GPU-bound texture itself
@@ -84,7 +91,7 @@ public sealed partial class Plugin
 
     // Multiply alpha by the quarter-circle coverage over one r×r corner box whose arc centre is (cx,cy), radius rad.
     // Fully inside the arc → alpha untouched; fully outside → alpha 0; a ~1px linear ramp spans the boundary.
-    private static void RoundCorner(Color32[] px, int w, int x0, int y0, float cx, float cy, float rad, int r)
+    private static void RoundCorner(Span<Color32> px, int w, int x0, int y0, float cx, float cy, float rad, int r)
     {
         for (int y = y0; y < y0 + r; y++)
         for (int x = x0; x < x0 + r; x++)
