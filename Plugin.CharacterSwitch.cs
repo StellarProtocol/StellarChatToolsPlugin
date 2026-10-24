@@ -76,6 +76,7 @@ public sealed partial class Plugin
         _convOrder.Clear();
         _convOrderDirty = true;
         _closedAt.Clear();
+        _stickerCheckedAt = float.NegativeInfinity;   // .Stickers.cs — the next picker open re-checks this character's stickers
         _serverReadDue.Clear();                // .Whisper.cs — pending game read marks were the previous character's
         _friendById.Clear();
         _friendViewDirty = true;               // .FriendPicker.cs — hidden until the re-merge (FriendSource)

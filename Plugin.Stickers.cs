@@ -73,6 +73,23 @@ public sealed partial class Plugin
             _stickerCat = FavoriteStickers().Count > 0 ? FavTab : EmojiTab;
         }
         if (!_stickerOpen) CloseFavMenu();       // .Favorites.cs — the context menu never outlives the picker
+        else RecheckStickerOwnership();
+    }
+
+    // Ownership changes in play (a pack bought / unlocked, a character switch) but the filtered catalog was built once. On
+    // an open, at most every StickerRecheckSec, drop it so the next read rebuilds it — one Lua ownership probe per GATED
+    // sticker, the same cost as the first build. A character reset (.CharacterSwitch.cs) re-arms it at once.
+    private const float StickerRecheckSec = 30f;
+    private float _stickerCheckedAt = float.NegativeInfinity;
+
+    private void RecheckStickerOwnership()
+    {
+        var now = _services.Framework.TimeNow;
+        if (now - _stickerCheckedAt < StickerRecheckSec) return;
+        _stickerCheckedAt = now;
+        _stickerCatalog = null;
+        _activeCatGroup = -1;      // the active-tab list is rebuilt from the new catalog
+        _favVisibleDirty = true;   // .Favorites.cs — favourites filter on the same catalog
     }
 
     // Populate _stickerCatalog + _stickerCats once the table has loaded. Returns false (no cache) while the catalog
