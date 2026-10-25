@@ -181,13 +181,18 @@ public sealed partial class Plugin
     private HudElement BuildTranslatedBody(int i) => new ColumnElement(new HudElement[]
     {
         new TextElement(() => TrBodyText(i), () => TrBodyColor(i)) { RichEmoji = true },
-        new RowElement(new HudElement[]
-        {
-            new TextElement(() => TrIcon, () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { Bold = true },
-            // RichEmoji = TMP rich text: the pending dots use an <alpha> tag to keep a constant width.
-            new TextElement(() => TrStatus(i), () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { RichEmoji = true },
-        }, Gap: TrSlotGap),
-    }, Gap: 2f);
+        BuildTrStatusLine(i),
+    }, Gap: TrBodyGap);
+
+    private const float TrBodyGap = 2f;   // translated body ↔ its status line (bubble and compact rows)
+
+    // "文A <status>" — shared by the bubble's translate branch and the compact row (.Compact.cs).
+    private HudElement BuildTrStatusLine(int i) => new RowElement(new HudElement[]
+    {
+        new TextElement(() => TrIcon, () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { Bold = true },
+        // RichEmoji = TMP rich text: the pending dots use an <alpha> tag to keep a constant width.
+        new TextElement(() => TrStatus(i), () => TrStatusColor(i), FontSize: TrTagFontSize, NoWrap: true) { RichEmoji = true },
+    }, Gap: TrSlotGap);
 
     // The sender name. Plain per-channel-coloured text on every row EXCEPT a whisper shown outside the Whisper tab, where
     // the person's name is a LINK that opens their conversation: the inbound whisperer after "Whisper · from", or the

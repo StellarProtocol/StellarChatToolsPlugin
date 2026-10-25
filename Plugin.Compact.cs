@@ -45,6 +45,8 @@ public sealed partial class Plugin
         if (_compactMessages == on) return;
         _compactMessages = on;
         _nameHoverSlot = -1;   // the hovered element may be in the branch that just went inactive
+        _trHoverSlot = -1;
+        _compactTrPillHoverSlot = -1;
         _cfg.Set(CfgCompact, on);
         _cfg.Save();
     }
@@ -69,19 +71,97 @@ public sealed partial class Plugin
     // ── Row ────────────────────────────────────────────────────────────────────────────────────────────────────────
     // Right-click anywhere on the line = the message menu (.MessageMenu.cs), same Bare target as a bubble / notice. The
     // sticker-vs-text choice is a whole-row branch: the text row needs a Weight body cell, the sticker row a fixed image.
+    // The text row is also the 文A hover zone (RowElement.OnHover: no tint/padding, FrontWindowBlocks-gated) — the bubble
+    // mode's [bubble · pill] row, here the whole line, so moving onto the pill keeps it shown. The name link / name-card
+    // selectables inside it keep their own hover + click; the right-click target around it still opens the menu.
     private HudElement BuildCompactRow(int i) => MessageRightClickTarget(new ConditionalElement(() => IsStickerRow(i),
         new RowElement(new HudElement[] { BuildCompactHead(i, top: false), BuildStickerImage(i, CompactStickerSize), new SpacerElement() }, Gap: CompactGap),
         new RowElement(new HudElement[]
         {
             BuildCompactHead(i, top: true),
-            // RichEmoji: the sanitized body (inline <sprite=N> emoji) exactly as the bubble shows it; translated when shown.
-            new CellElement(new TextElement(() => CompactBodyText(i), () => CompactBodyColor(i)) { RichEmoji = true }, Weight: 1f),
-        }, Gap: CompactGap)), i);
+            new CellElement(BuildCompactBody(i), Weight: 1f),
+            BuildCompactTrSlot(i),
+        }, Gap: CompactGap) { OnHover = on => OnTrHover(i, on) }), i);
+
+    // Body column: the line text, then — only while a translate state is live — the bubble's own status line
+    // ("文A Translated from Thai to English" / "Translating…" / "Translation failed · click to retry", .Bubbles.cs). It sits
+    // in the body cell, so it lines up under the body's hanging indent. The Cond is fine here (no BubbleElement measures
+    // this column), and every translate state change bumps the row's RowRevision (LogRowRevision) → re-measured in place.
+    // RichEmoji: the sanitized body (inline <sprite=N> emoji) exactly as the bubble shows it; translated when shown.
+    private HudElement BuildCompactBody(int i) => new ColumnElement(new HudElement[]
+    {
+        new TextElement(() => CompactBodyText(i), () => CompactBodyColor(i)) { RichEmoji = true },
+        new ConditionalElement(() => TrBubbleShown(i), BuildTrStatusLine(i)),
+    }, Gap: TrBodyGap);
 
     // Translation (.Translate.cs): while a row's translate state is live, the line shows that body (the translation, or
-    // the dimmed original while pending) instead — no status line / pill in compact mode.
+    // the dimmed original while pending) instead.
     private string CompactBodyText(int slot) => TrBubbleShown(slot) ? TrBodyText(slot) : LogText(slot);
-    private ColorRgba? CompactBodyColor(int slot) => TrBubbleShown(slot) ? TrBodyColor(slot) : LogMsgColor(slot);
+
+    // A shown real translation is drawn in the info blue — the compact line has no bubble to carry the bubble mode's
+    // blue outline (TrBubbleOutline, same condition: not "Already in X", not pending/failed). Pending = dimmed original.
+    private ColorRgba? CompactBodyColor(int slot)
+    {
+        if (!TrBubbleShown(slot)) return LogMsgColor(slot);
+        if (TrBubbleOutline(slot) == null) return TrBodyColor(slot);
+        return Luminance(_services.Theme.Colors.MenuBackground) >= 0.179f ? CompactTrTextLight : CompactTrText;
+    }
+
+    // ── 文A slot ────────────────────────────────────────────────────────────────────────────────────────────────────
+    // Same rules as the bubble's BuildTranslateSlot: a CONSTANT-width cell on every eligible line (someone else's
+    // translatable text — own lines, stickers, notices and emoji-only lines get none, as bubble mode), holding the pill
+    // only while ShowTrButton (hover with the setting on, or a live translate state); with the setting off the slot stays
+    // reserved and empty, exactly like the bubble gutter. Idle, the cell holds a bare SpacerElement — no graphic; the pill
+    // branch is SetActive(false), not transparent.
+    //
+    // Height: the bubble pill is 28 tall (20 strut + the Selectable's 4+4 padding), taller than a text line, so here it
+    // would grow the row on hover (a latched variable-list height doesn't follow a hover). The compact pill is therefore a
+    // BARE selectable (no padding) around a CompactTrPillH strut, and the idle spacer has the SAME height — so idle and
+    // hovered rows measure identically by construction; nothing re-wraps or jumps. Bare drops the selectable's hover wash,
+    // so the fill brightens on hover instead (CompactTrPillFill). Top-aligned against a wrapping body (Fill Cond → Column),
+    // like the head, so the pill sits at the right end of the FIRST line.
+    private const float CompactTrPillW = 26f, CompactTrPillH = 18f, CompactTrPillRadius = 6f;
+    private const float CompactTrPillHoverAlpha = 0.15f;   // added to the fill's alpha while the pointer is on the pill
+    // Info blue for a translated compact body; a darker shade on a light panel for contrast.
+    private static readonly ColorRgba CompactTrText      = new(0x9C / 255f, 0xC8 / 255f, 0xFF / 255f);
+    private static readonly ColorRgba CompactTrTextLight = new(0x2E / 255f, 0x6A / 255f, 0xB0 / 255f);
+
+    private int _compactTrPillHoverSlot = -1;
+
+    private HudElement BuildCompactTrSlot(int i)
+    {
+        var glyph = new TextElement(() => TrIcon, () => TrButtonGlyph(i), FontSize: TrButtonFontSize, Align: TextAlign.Center, NoWrap: true)
+            { Bold = true };   // Bold = the TMP path, which honours FontSize on this surface (plain Text ignores it)
+        var pill = new CellElement(new BubbleElement(new SelectableElement(
+                new RowElement(new HudElement[]
+                {
+                    new SpacerElement(Width: 0f, Height: CompactTrPillH), glyph, new SpacerElement(Width: 0f, Height: CompactTrPillH),
+                }, Gap: IconPillGap, Justify: RowJustify.Center),
+                OnClick: () => OnTranslateClick(i))   // .Translate.cs — translate / show original / retry, as the bubble pill
+            { Bare = true, OnHover = on => OnCompactTrPillHover(i, on) })
+            {
+                CornerRadius = CompactTrPillRadius, PaddingX = 0f, PaddingY = 0f, FillColor = Transparent,
+                FillColorFn = () => CompactTrPillFill(i), OutlineColorFn = () => TrButtonOutline(i),
+            }, Width: CompactTrPillW);
+        var cell = new CellElement(new ConditionalElement(() => ShowTrButton(i), pill,
+            new SpacerElement(Width: CompactTrPillW, Height: CompactTrPillH)), Width: CompactTrPillW);
+        return new ConditionalElement(() => CompactTrEligible(i), new ColumnElement(new HudElement[] { cell }), Fill: true);
+    }
+
+    private bool CompactTrEligible(int slot) => TryMsg(slot, out var m) && !IsSelf(m) && CanTranslate(m);
+
+    private void OnCompactTrPillHover(int slot, bool on)
+    {
+        if (on) _compactTrPillHoverSlot = slot;
+        else if (_compactTrPillHoverSlot == slot) _compactTrPillHoverSlot = -1;
+    }
+
+    private ColorRgba? CompactTrPillFill(int slot)
+    {
+        var f = TrButtonFill(slot);
+        if (_compactTrPillHoverSlot != slot || f is not { } c) return f;
+        return c with { A = Math.Min(1f, c.A + CompactTrPillHoverAlpha) };
+    }
 
     // [time] [name:] — or, for a whisper outside the Whisper tab, [time] [Whisper · from|to] [name link] [suffix:].
     private HudElement BuildCompactHead(int i, bool top)
