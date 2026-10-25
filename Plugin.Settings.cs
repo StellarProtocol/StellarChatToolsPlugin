@@ -173,6 +173,11 @@ public sealed partial class Plugin
 
         new SeparatorElement(),
 
+        // Compact messages (.Compact.cs): one-line rows instead of bubbles, switched live.
+        BuildCompactSettings(),
+
+        new SeparatorElement(),
+
         // Channel colours: the tab strip itself is the legend (each tab wears its channel's colour), so a swatch list
         // here would only repeat it. One hint pointing at where they are edited — the framework Theme settings
         // (IColorSlot is read-only to the plugin).

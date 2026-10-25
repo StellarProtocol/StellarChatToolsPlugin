@@ -100,6 +100,8 @@
   "chat.reply": "Sagot:",
   "chat.send": "Ipadala",
   "chat.settings.colorsHint": "Tugma ang mga kulay ng channel sa mga tab ng chat — palitan ang mga ito sa mga setting ng Theme.",
+  "chat.settings.compact": "Compact na mga mensahe",
+  "chat.settings.compactHint": "Simpleng linya, walang bubble. Mas magaan sa FPS.",
   "chat.settings.windowTitle": "Mga setting ng ChatTools",
   "chat.sticker.fav.add": "Idagdag sa mga paborito",
   "chat.sticker.fav.empty": "I-right-click ang isang sticker para idagdag ito sa mga paborito",

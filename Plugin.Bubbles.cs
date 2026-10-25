@@ -79,12 +79,14 @@ public sealed partial class Plugin
         // direct child of this Column (which force-expands child width). Applied once here so it covers BOTH the
         // self and other branches identically. The OUTER Cond picks the compact system-notice line (.SystemNotice.cs)
         // over any bubble — a whole-row switch, never inside a bubble's measured child. Outermost of all: the local-only
-        // date separator (.DateSeparators.cs), a System row too, so it must be picked before the notice branch.
+        // date separator (.DateSeparators.cs), a System row too, so it must be picked before the notice branch. Below the
+        // notice: the opt-in compact one-line row (.Compact.cs) — a whole-row branch, so the bubble layout is truly inactive.
         => new ColumnElement(new HudElement[]
         {
             new ConditionalElement(() => IsDateSepRow(i), BuildDateSepRow(i),
             new ConditionalElement(() => IsNoticeRow(i), MessageRightClickTarget(BuildNoticeRow(i), i),   // right-click = message menu (.MessageMenu.cs)
-                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false)))),
+            new ConditionalElement(CompactOn, BuildCompactRow(i),
+                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false))))),
             new SpacerElement(Height: BubbleRowGap),
         });
 
@@ -323,10 +325,11 @@ public sealed partial class Plugin
 
     // The sticker image for a row. GameTextureElement polls the texture each frame; LoadStickerIcon is cached, so
     // calling it again in the Uv func (to recover the sub-rect) is cheap and avoids shared-state ordering issues.
-    private HudElement BuildStickerImage(int i) =>
+    // size: the bubble's StickerSize, or the small compact-line size (.Compact.cs).
+    private HudElement BuildStickerImage(int i, float size = StickerSize) =>
         new GameTextureElement(
             () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; return id == 0 ? null : _services.GameAssets.LoadStickerIcon(id, out _); },
-            (int)StickerSize, (int)StickerSize,
+            (int)size, (int)size,
             () => { var id = TryMsg(i, out var m) ? m.StickerId : 0; if (id != 0) { _services.GameAssets.LoadStickerIcon(id, out var uv); return uv; } return new UvRect(0f, 0f, 1f, 1f); });
 
     // The charId whose avatar photo this row shows (0 = unknown → the default face). For our own echoed rows the

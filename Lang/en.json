@@ -100,6 +100,8 @@
   "chat.reply": "Reply:",
   "chat.send": "Send",
   "chat.settings.colorsHint": "Channel colours match the chat tabs — change them in Theme settings.",
+  "chat.settings.compact": "Compact messages",
+  "chat.settings.compactHint": "Plain lines, no bubbles. Lighter on FPS.",
   "chat.settings.windowTitle": "ChatTools Settings",
   "chat.sticker.fav.add": "Add to favorites",
   "chat.sticker.fav.empty": "Right-click a sticker to add it to favorites",

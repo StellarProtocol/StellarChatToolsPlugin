@@ -99,8 +99,9 @@ public sealed partial class Plugin
             // row sized by a short text row's stale cached height → permanent overlap). See StableRowId.
             RowId          = StableRowId,
             // Translate (.Translate.cs) swaps a row's text / adds a status line under it: the revision makes the list
-            // re-measure that one latched row in place instead of keeping its old height.
-            RowRevision    = TranslateRowRevision,
+            // re-measure that one latched row in place instead of keeping its old height. The compact-mode flag is folded
+            // in too (.Compact.cs), so switching modes re-measures every row in place and keeps the scroll position.
+            RowRevision    = LogRowRevision,
             // "↓ N new messages" bar (.NewBelow.cs): the list reports its own at-bottom pin decision, and a bump of
             // the token jumps to the newest row + re-pins (following unmeasured bottom rows until they settle).
             OnAtBottomChanged     = OnLogAtBottomChanged,

@@ -126,12 +126,15 @@ public sealed partial class Plugin
         }, Gap: 8f))
         { FillColor = TabTrackFill, CornerRadius = 10f, PaddingX = 0f, PaddingY = HeaderPadY },
         // Zero-height marker: Weight cell (min 0, preferred = the spacer's width) → laid out at the pane's real width.
-        // No bubble under it, so the NoCap rule doesn't bite.
-        new RowElement(new HudElement[]
-        {
-            new CellElement(new SpacerElement(Width: WhisperPaneMinWidth), Weight: 1f),
-        }) { ConstrainsWindowMinWidth = true },
+        // No bubble under it, so the NoCap rule doesn't bite. Compact lines (.Compact.cs) wrap, so that mode has a lower
+        // floor: a whole-marker Cond — the min-width measure skips a row that is inactive in the hierarchy.
+        new ConditionalElement(CompactOn, BuildPaneFloorMarker(WhisperPaneMinWidthCompact), BuildPaneFloorMarker(WhisperPaneMinWidth)),
     }, Gap: 0.01f);
+
+    private static HudElement BuildPaneFloorMarker(float floor) => new RowElement(new HudElement[]
+    {
+        new CellElement(new SpacerElement(Width: floor), Weight: 1f),
+    }) { ConstrainsWindowMinWidth = true };
 
     private string HeaderTitle() => _selectedPeer != 0 ? PeerName(_selectedPeer) : _loc.T("chat.whisper.pick");
 
