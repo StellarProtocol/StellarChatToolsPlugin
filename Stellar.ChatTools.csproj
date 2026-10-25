@@ -12,10 +12,11 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- i18n P2: consumes IPluginServices.Localization (ILocalization), framework 2.1.0. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.1.0" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
+    <!-- Released plugin SDK 2.26.0 (nuget.org): carries ILocalization, StickerInfo and BubbleElement, so no local
+         framework build is needed. All three pinned together so no older transitive Abstractions can shadow it. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.26.0" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.26.0" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.26.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- i18n catalogs: auto-discovered by the framework via the Lang.<code>.json suffix. -->
@@ -41,8 +42,8 @@
     <!-- Stellar menu (launcher) tile icon, 128x128 RGBA, read once via GetManifestResourceStream (Plugin.cs). -->
     <EmbeddedResource Include="Resources/chattools-icon.png" LogicalName="Stellar.ChatTools.Resources.chattools-icon.png" />
   </ItemGroup>
-  <!-- Local overrides: deploy target, game paths, and (while 2.24.0 is unreleased) a local Stellar.Abstractions
-       reference that carries BubbleElement — all in Local.props (gitignored). Imported AFTER the PackageReferences
-       so a `PackageReference Remove` in Local.props can take effect (mirrors the RaidManager convention). -->
+  <!-- Local overrides: deploy target and game paths, in Local.props (gitignored). Imported AFTER the
+       PackageReferences so a temporary `PackageReference Update/Remove` there (e.g. testing an unreleased local
+       framework build) can take effect (mirrors the RaidManager convention). -->
   <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
 </Project>
