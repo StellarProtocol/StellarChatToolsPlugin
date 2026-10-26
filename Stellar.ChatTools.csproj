@@ -7,7 +7,7 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.ChatTools</RootNamespace>
     <AssemblyName>Stellar.ChatTools</AssemblyName>
-    <Version>2.2.0</Version>
+    <Version>3.0.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
