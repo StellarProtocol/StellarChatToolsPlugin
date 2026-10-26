@@ -262,7 +262,7 @@ public sealed partial class Plugin
                 Id:          ConvMenuId,
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, ConvMenuW, ConvMenuH),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World

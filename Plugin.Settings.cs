@@ -17,9 +17,10 @@ namespace Stellar.ChatTools;
 /// dragged freely. It is a child of the chat window: closing/hiding the chat (✕, hotkey, zone load) closes it too, and
 /// it does not reopen by itself when the chat comes back.
 ///
-/// Z-order: Category Tools (ZCat 1) vs the chat's HUD (ZCat 0), and nothing ever BringToFront()s the chat, so settings
-/// always sorts above it. It also only ever opens from hidden (the ⚙ toggles it closed when open), so no BringToFront
-/// (Rule 5). The translate-language DropdownElement popup lives on its own root canvas (32766) — above every window.
+/// Z-order: settings and the chat are both Category Tools (same ZCat), so the tie breaks on ZSeq. Settings only ever
+/// opens from hidden (the ⚙ toggles it closed when open) → each open remounts it with a fresh, highest ZSeq, and
+/// nothing ever BringToFront()s the chat, so settings always sorts above it — no BringToFront needed (Rule 5). The
+/// translate-language DropdownElement popup lives on its own root canvas (32766) — above every window.
 /// </summary>
 public sealed partial class Plugin
 {
@@ -58,7 +59,7 @@ public sealed partial class Plugin
         _settingsOpen = true;
         _settingsSettleUntil = _services.Framework.TimeNow + SettingsSettleSec;
         _settingsCentredH = -1f;
-        _settingsWindow.SetVisible(true);   // opens from hidden, ZCat Tools > the chat's HUD → on top; no BringToFront
+        _settingsWindow.SetVisible(true);   // opens from hidden → fresh ZSeq above the chat (same ZCat); no BringToFront
         // A re-open finds the tree parked (still mounted, so IsShown is already true) → place it NOW so it never shows
         // a frame at the old spot. On the very first open it is unmounted (PlaceSettings bails); TickSettings centres it
         // once the mount lands.

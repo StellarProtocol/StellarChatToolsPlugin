@@ -72,7 +72,7 @@ public sealed partial class Plugin
                 Id:          MsgMenuId,
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, MsgMenuW, MsgMenuHeight()),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World

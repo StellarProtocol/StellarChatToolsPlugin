@@ -168,7 +168,7 @@ public sealed partial class Plugin
                 Id:          "chattools.stickermenu",
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, FavMenuW, FavMenuH),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World

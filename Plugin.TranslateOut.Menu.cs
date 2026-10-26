@@ -118,7 +118,7 @@ public sealed partial class Plugin
                 Id:          TrOutMenuId,
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, TrOutMenuW, TrOutMenuH),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World

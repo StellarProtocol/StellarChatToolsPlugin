@@ -67,7 +67,7 @@ public sealed partial class Plugin : IStellarPlugin
                     // Compact bubble layout: a narrower default than the game's chat (favouring density), but wide
                     // enough for the 7 read-tabs; grip-resizable (below) so users can grow it.
                     DefaultRect: new WindowRect(21f, 586f, 480f, 430f),
-                    Category:    WindowCategory.HUD,
+                    Category:    WindowCategory.Tools,
                     Style:       WindowPanelStyle.GlassMenu)
                 {
                     // Starts HIDDEN: opened only by the hotkey or the Stellar menu tile. StartVisible covers boot;

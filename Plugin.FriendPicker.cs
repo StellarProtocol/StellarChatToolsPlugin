@@ -108,7 +108,7 @@ public sealed partial class Plugin
                 Id:          FriendPickerId,
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, FriendPickerW, FriendPickerH),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World

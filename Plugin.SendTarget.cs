@@ -267,7 +267,7 @@ public sealed partial class Plugin
                 Id:          TargetMenuId,
                 Title:       "",
                 DefaultRect: new WindowRect(100f, 100f, TargetMenuW, TargetMenuH),
-                Category:    WindowCategory.HUD,
+                Category:    WindowCategory.Tools,
                 Style:       WindowPanelStyle.Borderless)
             { StartVisible = false, DismissOnOutsideClick = true,
               ShouldRender = () => _services.ClientState.Phase == GamePhase.World
