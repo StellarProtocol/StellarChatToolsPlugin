@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
-
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -9,15 +7,18 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.ChatTools</RootNamespace>
     <AssemblyName>Stellar.ChatTools</AssemblyName>
-    <Version>2.2.0</Version>
+    <Version>3.0.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- i18n P2: consumes IPluginServices.Localization (ILocalization), framework 2.1.0. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.1.0" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.0.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.0.0" />
+    <!-- Released plugin SDK 2.27.1 (nuget.org): carries ILocalization, StickerInfo and BubbleElement (2.26.0), the
+         2.27.0 runtime fixes (sticky cursor, caret, scroll anchor, press shield) and the 2.27.1 fixes (whisper-list
+         ellipsis on scroll, Auto Combo while the composer is focused), so no local framework build is needed.
+         All three pinned together so no older transitive Abstractions can shadow it. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.27.1" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.27.1" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.27.1" />
   </ItemGroup>
   <ItemGroup>
     <!-- i18n catalogs: auto-discovered by the framework via the Lang.<code>.json suffix. -->
@@ -27,5 +28,24 @@
     <EmbeddedResource Include="Lang/id.json" LogicalName="Stellar.ChatTools.Lang.id.json" />
     <EmbeddedResource Include="Lang/fil.json" LogicalName="Stellar.ChatTools.Lang.fil.json" />
     <EmbeddedResource Include="Lang/ko.json" LogicalName="Stellar.ChatTools.Lang.ko.json" />
+    <!-- Favorites tab icon (sticker picker), read once via GetManifestResourceStream (Plugin.Favorites.cs). -->
+    <EmbeddedResource Include="Assets/favorite_star.png" LogicalName="Stellar.ChatTools.Assets.favorite_star.png" />
+    <!-- Channel-tab unread dot (32x32, shown at 8 px), read once via GetManifestResourceStream (Plugin.Tabs.cs). -->
+    <EmbeddedResource Include="Assets/unread_dot.png" LogicalName="Stellar.ChatTools.Assets.unread_dot.png" />
+    <!-- Title-bar settings gear (same icon CooldownBar/StatInspector ship; the ⚙ glyph has no in-game font coverage),
+         read once via GetManifestResourceStream (Plugin.Window.cs). -->
+    <EmbeddedResource Include="Assets/settings_gear.png" LogicalName="Stellar.ChatTools.Assets.settings_gear.png" />
+    <!-- Send-target chip chevron (32x20 drawn at 8x5; light + dark copy because an image can't be tinted). Replaces the
+         "▾" glyph, whose fallback font made the chip taller than the other 28-tall composer pills (Plugin.SendTarget.cs). -->
+    <EmbeddedResource Include="Assets/chevron_light.png" LogicalName="Stellar.ChatTools.Assets.chevron_light.png" />
+    <EmbeddedResource Include="Assets/chevron_dark.png" LogicalName="Stellar.ChatTools.Assets.chevron_dark.png" />
+    <!-- Whisper online dot (32x32 green, shown at 7 px) for the conversation list + header (Plugin.WhisperList.cs). -->
+    <EmbeddedResource Include="Assets/online_dot.png" LogicalName="Stellar.ChatTools.Assets.online_dot.png" />
+    <!-- Stellar menu (launcher) tile icon, 128x128 RGBA, read once via GetManifestResourceStream (Plugin.cs). -->
+    <EmbeddedResource Include="Resources/chattools-icon.png" LogicalName="Stellar.ChatTools.Resources.chattools-icon.png" />
   </ItemGroup>
+  <!-- Local overrides: deploy target and game paths, in Local.props (gitignored). Imported AFTER the
+       PackageReferences so a temporary `PackageReference Update/Remove` there (e.g. testing an unreleased local
+       framework build) can take effect (mirrors the RaidManager convention). -->
+  <Import Project="$(MSBuildThisFileDirectory)Local.props" Condition="Exists('$(MSBuildThisFileDirectory)Local.props')" />
 </Project>

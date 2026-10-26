@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using Stellar.Abstractions.Domain;
+using Stellar.Abstractions.Services;
+
+namespace Stellar.ChatTools;
+
+/// <summary>
+/// The send composer: ONE row of equal-height (28) controls — a channel-coloured target chip (.SendTarget.cs), ＋ (quick
+/// phrases), ☺ (stickers/emoji), the text field (placeholder follows the target), a counter shown only near the 140 cap,
+/// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings live in their own
+/// window behind the title-bar gear (.Settings.cs). The target defaults to the active read-tab's channel but is overridable. Whisper is per
+/// PERSON: target 4 whispers the conversation selected in the Whisper tab (.Whisper.cs) — in that tab the chip is a
+/// non-clickable label with the recipient's name (or "No conversation").
+/// No local echo — sends round-trip via MessageReceived (and teach us our own identity, see Bubbles).
+/// </summary>
+public sealed partial class Plugin
+{
+    private const int MaxMessageLength = 140;   // mirrors the game's 0/140 counter; soft-capped on input
+    private const int ComposerEmojiFontSize = 14;   // ☺ pill sprite: ≈14 wide, line box < the 20 pill strut
+
+    // 0=Say, 1=World, 2=Party, 3=Guild, 4=Whisper (to _selectedPeer, .Whisper.cs).
+    private int _sendTargetIndex;
+
+    private string _inputText = string.Empty;
+    // The composer InputElement.FocusRequest: bumped to refocus the field (caret at the end) — a refused emoji pick, a
+    // restored draft, a finished translation. Accepted emoji picks use InsertRequest below instead. Stickers don't bump it.
+    private int _composerFocusSeq;
+    // Emoji picks (.Emoji.cs): bumped per pick with the tag to insert; the composer InputElement.InsertRequest polls the pair and
+    // inserts the tag AT THE CARET (replacing a selection), then refocuses with the caret after it.
+    private int _emojiInsertSeq;
+    private string _emojiInsertText = string.Empty;
+
+    // Default the composer target to the opened read-tab's channel (overridable afterwards). In-memory only (not
+    // persisted — only an explicit target-button click persists the default). Whisper mode lives ONLY in the Whisper
+    // tab: a whisper that kept going after switching to All was an accidental-whisper trap, so leaving Whisper always
+    // lands on a channel. All/System have no channel of their own, so leaving Whisper for them falls back to the SAVED
+    // default (never overwritten here); any other selection is left untouched there. _selectedPeer is kept, so coming
+    // back to Whisper re-targets the same conversation.
+    private void OnTabOpened(ChatTab tab)
+    {
+        switch (tab)
+        {
+            case ChatTab.Current: _sendTargetIndex = 0; break;
+            case ChatTab.World:   _sendTargetIndex = 1; break;
+            case ChatTab.Party:   _sendTargetIndex = 2; break;
+            case ChatTab.Guild:   _sendTargetIndex = 3; break;
+            case ChatTab.Whisper: _sendTargetIndex = 4; break;
+            default: if (_sendTargetIndex == 4) _sendTargetIndex = SavedSendTarget(); break;   // .Config.cs
+        }
+    }
+
+    // Give the composer the keyboard (FocusRequest: focused on the next window refresh, caret at the END of the draft) after
+    // a user action that took it away — a tab change (.Tabs.cs SelectTabFromUser), opening a conversation (.Whisper.cs).
+    // Skipped in the Whisper tab with no conversation picked: there is nobody to type to (the placeholder says to pick
+    // one), so the keyboard is not grabbed; the pick itself then focuses.
+    private void FocusComposer()
+    {
+        if (_activeTab == ChatTab.Whisper && _selectedPeer == 0) return;
+        _composerFocusSeq++;
+    }
+
+    private HudElement BuildComposer()
+    {
+        return new ColumnElement(new HudElement[]
+        {
+            // Outgoing-translate status ("Translating to Thai…" / "文A Translated to Thai · Undo" / failed), shown only
+            // while a state is live (.TranslateOut.cs) — it takes one line from the log above while visible.
+            BuildTrOutStatus(),
+            // ONE composer row: [target chip ▾] [＋] [☺] [文A] [text field …] [n/140 near the cap] [Send]. Every control is
+            // a 28-tall pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
+            // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
+            new RowElement(new HudElement[]
+            {
+                BuildTargetChip(),   // .SendTarget.cs — channel-coloured chip, click = target picker menu
+                // ＋ / ☺ are 28×28 squares (.SendTarget.cs BuildIconPill). ASCII "+" (bold, centred) — the fullwidth "＋"
+                // was ~19 wide and made the pill 47; it can't fit the 16-unit glyph slot of a 28 square.
+                BuildIconPill(new TextElement(() => "+", () => _services.Theme.Colors.MenuText, Emphasis: true, Align: TextAlign.Center, NoWrap: true),
+                    () => ToolPillFill(_quickOpen), ToggleQuickPhrases),
+                // Sticker (picture-emoji) picker toggle — all-icon popover, mutually exclusive with ＋ (.Stickers.cs). The
+                // old "☺" glyph is missing from every in-game face (it drew an EMPTY pill), so the icon is the game's own
+                // chat emoji <sprite=1> through the RichEmoji TMP path — the same tag + path as the picker's emoji tab icon
+                // (.Emoji.cs), colour by nature, so it reads on the dark pill. FontSize sizes the sprite to the 16 slot and
+                // keeps its line box under the 20 strut (TMP honours FontSize on this surface, unlike plain Text).
+                // CenterGlyphs: centre the drawn sprite, not the baseline-anchored line box (see BuildEmojiTabIcon).
+                BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
+                    () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
+                // Translate-my-draft 文A (.TranslateOut.cs): click = language menu; busy / done / failed states.
+                BuildTrOutButton(),
+                // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
+                // No AutoFocus: opening the window (F12, the Stellar menu tile, a reopen) leaves the keyboard with the game —
+                // the focus hotkey (.TabHotkeys.cs), a click, or a tab / emoji / translate / send action puts it here.
+                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
+                    { RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
+                      Locked = TrOutBusy, InsertRequest = () => (_emojiInsertSeq, _emojiInsertText) }, Weight: 1f),
+                new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
+                BuildSendPill(),     // .SendCooldown.cs — channel-coloured; greyed + "Ns" while empty / cooling down
+            // Min-width row (any language): the input is pinned at 160 (typing never grows it); the chip's label, the
+            // Send/"Ns" label and the near-cap counter move its natural width by a few tens of units — still well
+            // below the tab row's requirement, which wins.
+            }, Gap: 4f) { ConstrainsWindowMinWidth = true },
+
+            // Quick-phrases popover (.QuickPhrases.cs): send / delete / reorder / add phrases.
+            new ConditionalElement(() => _quickOpen, BuildQuickPopover()),
+            // Sticker picker popover (.Stickers.cs) — sibling of the quick-phrase one; only one is open at a time.
+            new ConditionalElement(() => _stickerOpen, BuildStickerPopover()),
+        }, Gap: 4f);
+    }
+
+    // ＋ / ☺ pill fill: the recessed track tint at rest (the tab strip's track), the accent pill while its popover is open.
+    private ColorRgba? ToolPillFill(bool open) => open ? _services.Theme.Colors.MenuAccent with { A = TabPillAlpha } : TabTrackFill;
+
+    // A pick from the target menu (.SendTarget.cs) — index-based like the old dropdown, and persisted as the default.
+    // Whisper needs a PERSON, so picking it opens the Whisper tab (pick or start a conversation there) and is never the
+    // persisted default. Picking a channel while the Whisper tab is open leaves it for that channel's tab — the composer
+    // and the log never disagree about where you are talking.
+    private void OnPickTarget(int index)
+    {
+        if (index < 0 || index >= TargetTabs.Length) return;
+        if (index == 4) { SetActiveTab(ChatTab.Whisper); _sendTargetIndex = 4; return; }
+        if (_activeTab == ChatTab.Whisper) SetActiveTab(TargetTabs[index]);
+        _sendTargetIndex = index;
+        SaveSendTarget();
+    }
+
+    // Soft-cap the field to the game's 140 chars; the FieldBinding re-seeds the field from _inputText on the
+    // next poll, so a truncation shows immediately. Only TYPING past the cap is cut: a draft that is already longer (a
+    // translation, .TranslateOut.cs) is never cut silently — the red counter shows it and Send waits until it fits.
+    // An unchanged value (the field echoing our own re-seed) is not an edit.
+    private void SetInput(string s)
+    {
+        s ??= string.Empty;
+        if (string.Equals(s, _inputText, StringComparison.Ordinal)) return;
+        if (s.Length > MaxMessageLength && _inputText.Length <= MaxMessageLength) s = s.Substring(0, MaxMessageLength);
+        _inputText = s;
+        NoteDraftEdited();   // .TranslateOut.cs — the first edit hides the translate status line
+    }
+
+    // Index -> the channel the echo of a send will arrive on (for self-identity round-trip learning).
+    private ChatChannel SendChannel() => _sendTargetIndex switch
+    {
+        0 => ChatChannel.Say,
+        1 => ChatChannel.World,
+        2 => ChatChannel.Party,
+        3 => ChatChannel.Guild,
+        _ => ChatChannel.Whisper,
+    };
+
+    // Resolve the current send target. Whisper goes to the selected conversation (.Whisper.cs); null means "cannot send"
+    // (no conversation picked — the placeholder already says so), so the caller just no-ops.
+    private ChatTarget? ResolveTarget() => _sendTargetIndex switch
+    {
+        0 => ChatTarget.Say,
+        1 => ChatTarget.World,
+        2 => ChatTarget.Party,
+        3 => ChatTarget.Guild,
+        4 => _selectedPeer != 0 ? ChatTarget.Whisper(_selectedPeer) : null,
+        _ => null,
+    };
+
+    // Allocation-free "is there someone to send to" (polled every refresh by CanSendNow); mirrors ResolveTarget.
+    private bool HasSendTarget() => _sendTargetIndex != 4 || _selectedPeer != 0;
+
+    // Enter and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the draft: the field's
+    // Enter strip already left the text in place, and _inputText is only cleared on a real send.
+    private void DoSend()
+    {
+        if (string.IsNullOrWhiteSpace(_inputText)) return;
+        if (TrOutBusy() || _inputText.Length > MaxMessageLength) return;   // .TranslateOut.cs — translating / over the cap
+        if (CoolingDown()) return;                 // .SendCooldown.cs
+        if (ResolveTarget() is not { } target) return;
+        var text = _inputText;
+        // Game dispatcher — no packet construction, no local echo. A send that never left the client (no live connection)
+        // is reported before Send returns (.SendCooldown.cs TrySendNow): the draft is then KEPT, nothing below runs.
+        if (!TrySendNow(() => _chat.Send(target, text))) return;
+        NoteSelfSend(SendChannel(), text);         // .Bubbles.cs — learn our identity from the echo (it can't arrive during Send)
+        NoteSendDispatched(text);                  // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
+        JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
+        _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
+        ResetTrOut();                              // .TranslateOut.cs — a send ends the translate status line
+    }
+
+    // True when the phrase was actually sent (false: blank, no target, the target is cooling down, or it never left the
+    // client — the popover then stays open for a retry).
+    private bool SendPhrase(string phrase)
+    {
+        if (string.IsNullOrWhiteSpace(phrase)) return false;
+        if (CoolingDown()) return false;       // .SendCooldown.cs
+        if (ResolveTarget() is not { } target) return false;
+        if (!TrySendNow(() => _chat.Send(target, phrase))) return false;   // .SendCooldown.cs
+        NoteSelfSend(SendChannel(), phrase);   // .Bubbles.cs
+        NoteSendDispatched(null);              // .SendCooldown.cs — a phrase never touches the draft
+        JumpLogToBottom();   // .NewBelow.cs
+        return true;
+    }
+}

@@ -1,0 +1,120 @@
+using System;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using UnityEngine;
+
+namespace Stellar.ChatTools;
+
+/// <summary>
+/// Avatar decode + rounded-corner bake helpers (split out of Plugin.Avatars.cs for the 500-LoC gate — a pure move). Every
+/// avatar texture, per-player and the shared default, is made here; the cache / pipeline lives in Plugin.Avatars.cs.
+/// </summary>
+public sealed partial class Plugin
+{
+    // Decode a PNG and return a mipmap-free, rounded-corner RGBA32 texture. Null on any failure. Every avatar
+    // (per-player AND the shared default, which also resolves through here) is decoded via this one method, so the
+    // rounded-corner bake lives here once — covering all paths (chat rows, whisper list + header, friend picker,
+    // store hit or fresh download) without double-baking.
+    private Texture2D? DecodePng(byte[]? bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return null;
+        Texture2D? src = null;
+        try
+        {
+            src = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+            // [Hitch] sub-buckets (diagnostics only): native decode / pixel bake / GPU upload. Only the FALLBACK path
+            // runs here now — the worker-prepared one is ct:av.upload (.Avatars.Prepare.cs).
+            var hT = Stellar.Abstractions.Diagnostics.HitchProbe.Begin();
+            bool ok = ImageConversion.LoadImage(src, bytes);   // stays readable
+            Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:av.loadImage", hT);
+            if (!ok) { SafeDestroy(src); return null; }
+            var tex = BakeRoundedAvatar(src);
+            if (!ReferenceEquals(tex, src)) SafeDestroy(src);
+            return tex;
+        }
+        catch { if (src != null) SafeDestroy(src); return null; }
+    }
+
+    // Bake rounded-SQUARE corners into the ALPHA so no avatar needs a per-item stencil Mask (every live uGUI Mask is
+    // a UI-batch break + extra stencil draw calls EVERY drawn frame — the at-rest FPS cost); the rounding is paid
+    // once here, at decode time, inside the budgeted per-tick decode queue.
+    //
+    // ⚠️ LoadImage RE-FORMATS the texture to match the PNG: the RGBA32 we create is only a request. An RGB PNG (colour
+    // type 2 — ~93% of the server's avatar photos, 300×300 RGB) comes back RGB24, which has NO alpha channel, so a
+    // SetPixels32 bake on it is silently discarded and the corners stay square. Hence: if LoadImage didn't hand back
+    // RGBA32, copy the pixels (GetPixels32 reports a=255 for RGB24) into an explicit RGBA32 texture and bake THAT.
+    //
+    // The radius is AvatarCornerFraction of the texture's short side, so it lands at the same fraction of whatever
+    // size the element draws it at. A ~1px coverage ramp across the arc keeps the edge anti-aliased. The upload marks
+    // the texture non-readable — nothing reads it back, and it frees the CPU-side copy of each LRU entry.
+    private Texture2D BakeRoundedAvatar(Texture2D src)
+    {
+        int w = src.width, h = src.height;
+        // ⚠️ PERF + correctness: edit the IL2CPP pixel array IN PLACE through ONE Span, never a managed Color32[].
+        //   • Il2CppArrayBase<T>'s implicit T[] operator copies element-by-element through the indexer, and EVERY
+        //     Il2CppStructArray<T>[i] re-runs AsSpan() = an il2cpp_array_length P/Invoke + a GC-handle Pointer read.
+        //     That is several native calls PER PIXEL: ~20 ms for a 300×300 photo, hundreds of ms for a big custom
+        //     one — inside the decode tick, i.e. the 125–435 ms `stellar.chattools` [Hitch] spikes (2026-10-24).
+        //   • The span is a view of the native buffer, so RoundCorner's writes land in `il2px` itself and
+        //     SetPixels32(il2px) uploads them with no copy back. (The older bug — four throwaway T[] copies, square
+        //     corners — came from converting per RoundCorner call; a single in-place view can't repeat it.)
+        var hT = Stellar.Abstractions.Diagnostics.HitchProbe.Begin();
+        Il2CppStructArray<Color32> il2px = src.GetPixels32();
+        Span<Color32> px = il2px.AsSpan();   // valid while il2px is alive (held in this frame)
+        var srcFormat = src.format;
+        var dst = src;
+        // Bake into an explicit RGBA32 texture whenever LoadImage re-formatted it (RGB24 has no alpha; ARGB32 does,
+        // but a uniform RGBA32 keeps the bake + diagnostic one path).
+        if (srcFormat != TextureFormat.RGBA32)
+            dst = new Texture2D(w, h, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+        dst.filterMode = FilterMode.Bilinear;
+        dst.wrapMode = TextureWrapMode.Clamp;
+
+        float rPx = AvatarCornerFraction * Mathf.Min(w, h);
+        if (w > 2 && h > 2 && rPx >= 0.5f)
+        {
+            int r = Mathf.Min(Mathf.CeilToInt(rPx), Mathf.Min(w, h) / 2);   // corner box side (clamped so boxes can't overlap)
+            // Each corner's quarter-circle arc centre is inset rPx from the two edges it touches; only the r×r corner
+            // boxes are visited (everything else keeps its alpha). (x,y) origin is bottom-left (GetPixels32 row order).
+            RoundCorner(px, w, 0,     0,     rPx,           rPx,           rPx, r);   // bottom-left
+            RoundCorner(px, w, w - r, 0,     (w - 1) - rPx, rPx,           rPx, r);   // bottom-right
+            RoundCorner(px, w, 0,     h - r, rPx,           (h - 1) - rPx, rPx, r);   // top-left
+            RoundCorner(px, w, w - r, h - r, (w - 1) - rPx, (h - 1) - rPx, rPx, r);   // top-right
+        }
+        dst.SetPixels32(il2px);   // same native array the span edited — no managed→IL2CPP conversion
+        if (!_loggedAvatarFormat)
+        {
+            // One-shot proof the bake reached the texture: read the corner back from the GPU-bound texture itself
+            // (before Apply drops the CPU copy). Expect a=0 at (0,0) for any rounded avatar.
+            _loggedAvatarFormat = true;
+            byte cornerA = (byte)(dst.GetPixel(0, 0).a * 255f);
+            byte centreA = (byte)(dst.GetPixel(w / 2, h / 2).a * 255f);
+            _services.Log.Info($"[ChatTools] avatar bake: decoded {srcFormat} → displayed {dst.format} {w}x{h}, " +
+                               $"corner r={AvatarCornerFraction * Mathf.Min(w, h):0.#}px, alpha corner(0,0)={cornerA} centre={centreA}");
+        }
+        hT = Stellar.Abstractions.Diagnostics.HitchProbe.Lap("ct:av.bake", hT);
+        dst.Apply(false, true);   // upload; no mipmaps (mip-free), drop the CPU copy
+        Stellar.Abstractions.Diagnostics.HitchProbe.End("ct:av.apply", hT);
+        return dst;
+    }
+
+    // Multiply alpha by the quarter-circle coverage over one r×r corner box whose arc centre is (cx,cy), radius rad.
+    // Fully inside the arc → alpha untouched; fully outside → alpha 0; a ~1px linear ramp spans the boundary.
+    private static void RoundCorner(Span<Color32> px, int w, int x0, int y0, float cx, float cy, float rad, int r)
+    {
+        for (int y = y0; y < y0 + r; y++)
+        for (int x = x0; x < x0 + r; x++)
+        {
+            float dx = x - cx, dy = y - cy;
+            float cov = Mathf.Clamp01(rad + 0.5f - Mathf.Sqrt(dx * dx + dy * dy));
+            if (cov >= 1f) continue;                          // inside the arc → keep
+            int idx = y * w + x;
+            px[idx].a = (byte)(px[idx].a * cov);
+        }
+    }
+
+    private static bool IsPng(byte[]? b) =>
+        b != null && b.Length >= 4 && b.Length < PngMaxBytes
+        && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47;
+
+    private static void SafeDestroy(UnityEngine.Object? o) { try { if (o != null) UnityEngine.Object.Destroy(o); } catch { } }
+}
