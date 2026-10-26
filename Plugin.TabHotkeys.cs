@@ -9,6 +9,8 @@ namespace Stellar.ChatTools;
 
 /// <summary>
 /// Previous / next read-tab hotkeys. Declared UNBOUND (no suggested default — the user binds them in Settings → Hotkeys).
+/// The focus/unfocus toggle is the exception: it defaults to Return (owner request 2026-10-27), like the game's own chat
+/// key. Being IsActive-gated, Return keeps its game meaning whenever the chat window is closed.
 /// They cycle All → World → Current → Party → Guild → Whisper → System and wrap, through the SAME path as a tab click
 /// (<see cref="SelectTabFromUser"/>), so leaving / entering Whisper behaves identically. A third, "focus/unfocus chat
 /// input", is a TOGGLE: with the composer holding the keyboard it DEFOCUSES it exactly like a click-away / Esc (see
@@ -42,7 +44,7 @@ public sealed partial class Plugin
                 { IsActive = TabHotkeysActive },
             () => CycleTab(+1));
         _focusInputHotkey = _services.Hotkeys.DeclareAction(
-            new HotkeyAction("chattools.input.focus", _loc.T("chat.hotkey.focusInput"), SuggestedDefault: null)
+            new HotkeyAction("chattools.input.focus", _loc.T("chat.hotkey.focusInput"), SuggestedDefault: new KeyBinding(StellarKeyCode.Return))
                 { IsActive = TabHotkeysActive },
             ToggleComposerFocus);
     }
