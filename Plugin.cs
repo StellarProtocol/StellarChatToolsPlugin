@@ -101,7 +101,7 @@ public sealed partial class Plugin : IStellarPlugin
                 Description:     _loc.T("chat.hotkey.toggle"),
                 SuggestedDefault: new KeyBinding(StellarKeyCode.F12)),
             _services.Hotkeys);
-        // Previous / next read-tab hotkeys (.TabHotkeys.cs): unbound, and dormant (key passes to the game) while hidden.
+        // Previous / next read-tab + focus-input hotkeys (.TabHotkeys.cs): unbound, and dormant (key passes to the game) while hidden.
         InitTabHotkeys();
 
         // Always-on subscription: inbound messages drive BOTH per-tab unread tracking AND (when enabled)

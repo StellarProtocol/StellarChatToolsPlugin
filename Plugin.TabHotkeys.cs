@@ -6,7 +6,10 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// Previous / next read-tab hotkeys. Declared UNBOUND (no suggested default — the user binds them in Settings → Hotkeys).
 /// They cycle All → World → Current → Party → Guild → Whisper → System and wrap, through the SAME path as a tab click
-/// (<see cref="SelectTabFromUser"/>), so leaving / entering Whisper behaves identically.
+/// (<see cref="SelectTabFromUser"/>), so leaving / entering Whisper behaves identically. A third, "focus chat input",
+/// puts the keyboard in the composer through the same path as the emoji / sticker pickers (<see cref="FocusComposer"/>,
+/// a no-op on Whisper with no peer picked). Its triggering key is not typed into the field: the focus request only
+/// activates the field on a later frame (UGuiTextInput.FocusRequest), after that key-down event has already been consumed.
 ///
 /// Gated by <c>HotkeyAction.IsActive</c> (framework 2.26.0): while the chat window is not shown the action is dormant —
 /// it neither fires nor is held back from the game, so a key bound here (say Tab) keeps its game meaning whenever the
@@ -18,7 +21,7 @@ namespace Stellar.ChatTools;
 /// </summary>
 public sealed partial class Plugin
 {
-    private IHotkeyAction? _prevTabHotkey, _nextTabHotkey;
+    private IHotkeyAction? _prevTabHotkey, _nextTabHotkey, _focusInputHotkey;
 
     private void InitTabHotkeys()
     {
@@ -30,6 +33,10 @@ public sealed partial class Plugin
             new HotkeyAction("chattools.tab.next", _loc.T("chat.hotkey.nextTab"), SuggestedDefault: null)
                 { IsActive = TabHotkeysActive },
             () => CycleTab(+1));
+        _focusInputHotkey = _services.Hotkeys.DeclareAction(
+            new HotkeyAction("chattools.input.focus", _loc.T("chat.hotkey.focusInput"), SuggestedDefault: null)
+                { IsActive = TabHotkeysActive },
+            FocusComposer);
     }
 
     // Polled by the framework every tick — keep it a plain property read. IsShown (not Visible): false while the window
@@ -47,5 +54,6 @@ public sealed partial class Plugin
     {
         _prevTabHotkey?.Dispose();
         _nextTabHotkey?.Dispose();
+        _focusInputHotkey?.Dispose();
     }
 }
