@@ -37,7 +37,7 @@
   "chat.hotkey.toggle": "ChatToolsウィンドウの表示切替",
   "chat.hotkey.prevTab": "前のチャットタブ（ChatTools表示中のみ）",
   "chat.hotkey.nextTab": "次のチャットタブ（ChatTools表示中のみ）",
-  "chat.hotkey.focusInput": "チャット入力欄にフォーカス（ChatTools表示中のみ）",
+  "chat.hotkey.focusInput": "チャット入力欄のフォーカス切替（ChatTools表示中のみ）",
   "chat.lang.af": "アフリカーンス語",
   "chat.lang.ar": "アラビア語",
   "chat.lang.bg": "ブルガリア語",

@@ -37,7 +37,7 @@
   "chat.hotkey.toggle": "สลับหน้าต่าง ChatTools",
   "chat.hotkey.prevTab": "แท็บแชทก่อนหน้า (เมื่อเปิด ChatTools อยู่)",
   "chat.hotkey.nextTab": "แท็บแชทถัดไป (เมื่อเปิด ChatTools อยู่)",
-  "chat.hotkey.focusInput": "โฟกัสช่องพิมพ์แชท (เมื่อเปิด ChatTools อยู่)",
+  "chat.hotkey.focusInput": "โฟกัส/เลิกโฟกัสช่องพิมพ์แชท (เมื่อเปิด ChatTools อยู่)",
   "chat.lang.af": "แอฟริกานส์",
   "chat.lang.ar": "อาหรับ",
   "chat.lang.bg": "บัลแกเรีย",

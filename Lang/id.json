@@ -37,7 +37,7 @@
   "chat.hotkey.toggle": "Alihkan jendela ChatTools",
   "chat.hotkey.prevTab": "Tab obrolan sebelumnya (saat ChatTools terbuka)",
   "chat.hotkey.nextTab": "Tab obrolan berikutnya (saat ChatTools terbuka)",
-  "chat.hotkey.focusInput": "Fokus ke kolom obrolan (saat ChatTools terbuka)",
+  "chat.hotkey.focusInput": "Fokus/lepas fokus kolom obrolan (saat ChatTools terbuka)",
   "chat.lang.af": "Afrikaans",
   "chat.lang.ar": "Arab",
   "chat.lang.bg": "Bulgaria",

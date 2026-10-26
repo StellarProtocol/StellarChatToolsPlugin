@@ -37,7 +37,7 @@
   "chat.hotkey.toggle": "Toggle ChatTools window",
   "chat.hotkey.prevTab": "Previous chat tab (while ChatTools is open)",
   "chat.hotkey.nextTab": "Next chat tab (while ChatTools is open)",
-  "chat.hotkey.focusInput": "Focus chat input (while ChatTools is open)",
+  "chat.hotkey.focusInput": "Focus/unfocus chat input (while ChatTools is open)",
   "chat.lang.af": "Afrikaans",
   "chat.lang.ar": "Arabic",
   "chat.lang.bg": "Bulgarian",
