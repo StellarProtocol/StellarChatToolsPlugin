@@ -12,12 +12,13 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Released plugin SDK 2.27.0 (nuget.org): carries ILocalization, StickerInfo and BubbleElement (2.26.0) plus the
-         2.27.0 runtime fixes (sticky cursor, caret, scroll anchor, press shield), so no local
-         framework build is needed. All three pinned together so no older transitive Abstractions can shadow it. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.27.0" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.27.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.27.0" />
+    <!-- Released plugin SDK 2.27.1 (nuget.org): carries ILocalization, StickerInfo and BubbleElement (2.26.0), the
+         2.27.0 runtime fixes (sticky cursor, caret, scroll anchor, press shield) and the 2.27.1 fixes (whisper-list
+         ellipsis on scroll, Auto Combo while the composer is focused), so no local framework build is needed.
+         All three pinned together so no older transitive Abstractions can shadow it. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.27.1" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.27.1" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.27.1" />
   </ItemGroup>
   <ItemGroup>
     <!-- i18n catalogs: auto-discovered by the framework via the Lang.<code>.json suffix. -->
