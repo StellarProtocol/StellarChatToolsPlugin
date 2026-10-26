@@ -88,8 +88,10 @@ public sealed partial class Plugin
                 // Translate-my-draft 文A (.TranslateOut.cs): click = language menu; busy / done / failed states.
                 BuildTrOutButton(),
                 // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
+                // No AutoFocus: opening the window (F12, the Stellar menu tile, a reopen) leaves the keyboard with the game —
+                // the focus hotkey (.TabHotkeys.cs), a click, or a tab / emoji / translate / send action puts it here.
                 new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
-                    { AutoFocus = true, RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
+                    { RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
                       Locked = TrOutBusy, InsertRequest = () => (_emojiInsertSeq, _emojiInsertText) }, Weight: 1f),
                 new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
                 BuildSendPill(),     // .SendCooldown.cs — channel-coloured; greyed + "Ns" while empty / cooling down

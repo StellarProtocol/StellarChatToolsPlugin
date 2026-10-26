@@ -72,8 +72,8 @@ public sealed partial class Plugin
     // sticks: the field's UGuiTextInput.Tick sees the focus-lost edge and restores the cursor, KeyboardInputGate
     // releases the game keyboard (IsFocused only stays true through a SUBMIT grace, which a deactivation doesn't arm),
     // and nothing refocuses — FocusRequest fires only when _composerFocusSeq changes (we don't bump it here) and the
-    // window's AutoFocus only on a user-initiated show. Never throws out of the hotkey: any Unity/interop failure just
-    // falls through to the focus branch.
+    // composer has no AutoFocus (opening the window never grabs the keyboard). Never throws out of the hotkey: any
+    // Unity/interop failure just falls through to the focus branch.
     private bool TryDefocusComposer()
     {
         try
