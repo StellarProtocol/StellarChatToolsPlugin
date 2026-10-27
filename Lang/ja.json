@@ -100,6 +100,8 @@
   "chat.quick.title": "定型文",
   "chat.reply": "返信:",
   "chat.send": "送信",
+  "chat.settings.allTab.hint": "「すべて」タブに表示するチャンネルです。クリックでオフにできます。",
+  "chat.settings.allTab.title": "「すべて」タブ",
   "chat.settings.colorsHint": "チャンネルの色はチャットのタブと同じです。テーマ設定で変更できます。",
   "chat.settings.compact": "コンパクトモード",
   "chat.settings.compactHint": "吹き出しやアバターなしで、1メッセージを1行で表示します。",

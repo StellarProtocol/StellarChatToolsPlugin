@@ -9,7 +9,7 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// The settings window (<c>chattools.settings</c>), toggled by the title-bar ⚙ of the chat window. A SEPARATE window,
 /// not a drawer inside <c>chattools.main</c>: the inline drawer squeezed the log and got messy in a short window, and
-/// the chat layout must never change when settings open. Content: auto-reply, translation (.Translate.cs), whisper
+/// the chat layout must never change when settings open. Content: auto-reply, All-tab channels (.AllTabFilter.cs), translation (.Translate.cs), whisper
 /// history (.WhisperHistory.Settings.cs) and the channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
 ///
 /// Placement: re-centred over the chat window's CURRENT rect on EVERY open (clamped on-screen) — it reads as a sheet
@@ -161,6 +161,11 @@ public sealed partial class Plugin
             }, Gap: 4f),
             new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.MenuMuted),
         }, Gap: 4f)),
+
+        new SeparatorElement(),
+
+        // All tab (.AllTabFilter.cs): which channels the All tab shows — one toggle chip per channel tab.
+        BuildAllTabSettings(),
 
         new SeparatorElement(),
 

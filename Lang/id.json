@@ -100,6 +100,8 @@
   "chat.quick.title": "Frasa cepat",
   "chat.reply": "Balas:",
   "chat.send": "Kirim",
+  "chat.settings.allTab.hint": "Kanal yang ditampilkan di tab Semua. Klik untuk mematikannya.",
+  "chat.settings.allTab.title": "Tab Semua",
   "chat.settings.colorsHint": "Warna kanal sama dengan tab chat — ubah di pengaturan Tema.",
   "chat.settings.compact": "Mode ringkas",
   "chat.settings.compactHint": "Satu baris per pesan, tanpa gelembung atau avatar.",
