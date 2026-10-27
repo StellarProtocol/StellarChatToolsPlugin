@@ -89,8 +89,8 @@ public sealed partial class Plugin
         // The active tab is "being viewed", so a message for it is seen immediately (never shows unread). All shows
         // EVERY channel, so while it is open the message's own channel tab counts as seen too — otherwise reading
         // everything in All would still leave each channel tab lit. (A message arriving while a DIFFERENT channel
-        // tab is open still lights its own tab.)
-        var seenTab = _activeTab == ChatTab.All ? ChannelTab(msg.Channel) : _activeTab;
+        // tab is open still lights its own tab.) A channel the user hid from All (.AllTabFilter.cs) was NOT seen there.
+        var seenTab = _activeTab == ChatTab.All ? (AllTabShows(msg) ? ChannelTab(msg.Channel) : null) : _activeTab;
         if (seenTab is { } t && TabChannel(t) == msg.Channel)
             _lastSeen[t] = seq;
     }
@@ -116,9 +116,9 @@ public sealed partial class Plugin
         if (tab != _activeTab) { _tabResetPending = true; ResetNewBelow(); }   // .Log.cs — re-pin the log to bottom + re-measure heights (ResetScroll); .NewBelow.cs — new tab, nothing pending below
         _activeTab = tab;
         if (TabChannel(tab) is { } ch) _lastSeen[tab] = NewestFor(ch);   // opening a tab clears its unread
-        else                                                               // opening All = everything is seen
+        else                                                               // opening All = everything it shows is seen
             foreach (var t in Tabs)
-                if (TabChannel(t) is { } c) _lastSeen[t] = NewestFor(c);
+                if (TabChannel(t) is { } c && AllTabShows(c)) _lastSeen[t] = NewestFor(c);   // hidden channels keep their dot
         OnTabOpened(tab);   // .Composer.cs — default the composer send-target to the tab's channel
     }
 

@@ -182,7 +182,8 @@ public sealed partial class Plugin
     {
         if (IsUnrenderable(cm)) return false;
         if (peer >= 0) return peer != 0 && cm.Channel == ChatChannel.Whisper && PeerOf(cm) == peer && WhisperInvolvesSelf(cm);
-        return (ch == null || cm.Channel == ch.Value) && (cm.Channel != ChatChannel.Whisper || WhisperInvolvesSelf(cm));
+        // All = every channel the user left on (.AllTabFilter.cs — own sends always), a channel tab = that channel only.
+        return (ch == null ? AllTabShows(cm) : cm.Channel == ch.Value) && (cm.Channel != ChatChannel.Whisper || WhisperInvolvesSelf(cm));
     }
 
     // ── Incremental appends ─────────────────────────────────────────────────────────────────────────────────────────

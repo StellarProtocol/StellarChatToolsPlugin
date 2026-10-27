@@ -100,6 +100,8 @@
   "chat.quick.title": "ข้อความสำเร็จรูป",
   "chat.reply": "ตอบกลับ:",
   "chat.send": "ส่ง",
+  "chat.settings.allTab.hint": "แชนเนลที่แสดงในแท็บทั้งหมด คลิกเพื่อปิด",
+  "chat.settings.allTab.title": "แท็บทั้งหมด",
   "chat.settings.colorsHint": "สีของแชนเนลตรงกับแท็บแชท — เปลี่ยนได้ในการตั้งค่าธีม",
   "chat.settings.compact": "โหมดกะทัดรัด",
   "chat.settings.compactHint": "แสดงข้อความละหนึ่งบรรทัด ไม่มีกรอบข้อความหรือรูปโปรไฟล์",

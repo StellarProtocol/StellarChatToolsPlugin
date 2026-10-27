@@ -100,6 +100,8 @@
   "chat.quick.title": "Mabilisang parirala",
   "chat.reply": "Sagot:",
   "chat.send": "Ipadala",
+  "chat.settings.allTab.hint": "Mga channel na ipinapakita sa tab na Lahat. I-click para i-off ang isa.",
+  "chat.settings.allTab.title": "Tab na Lahat",
   "chat.settings.colorsHint": "Tugma ang mga kulay ng channel sa mga tab ng chat — palitan ang mga ito sa mga setting ng Theme.",
   "chat.settings.compact": "Compact na mode",
   "chat.settings.compactHint": "Isang linya bawat mensahe, walang bubble o avatar.",

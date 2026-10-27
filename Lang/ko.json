@@ -100,6 +100,8 @@
   "chat.quick.title": "상용구",
   "chat.reply": "응답:",
   "chat.send": "보내기",
+  "chat.settings.allTab.hint": "전체 탭에 표시할 채널입니다. 클릭하면 끌 수 있습니다.",
+  "chat.settings.allTab.title": "전체 탭",
   "chat.settings.colorsHint": "채널 색상은 채팅 탭과 같습니다. 테마 설정에서 변경할 수 있습니다.",
   "chat.settings.compact": "간결 모드",
   "chat.settings.compactHint": "말풍선과 아바타 없이 메시지를 한 줄로 표시합니다.",

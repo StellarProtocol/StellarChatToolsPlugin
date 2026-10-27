@@ -100,6 +100,8 @@
   "chat.quick.title": "Quick phrases",
   "chat.reply": "Reply:",
   "chat.send": "Send",
+  "chat.settings.allTab.hint": "Channels shown in the All tab. Click to turn one off.",
+  "chat.settings.allTab.title": "All tab",
   "chat.settings.colorsHint": "Channel colours match the chat tabs — change them in Theme settings.",
   "chat.settings.compact": "Compact mode",
   "chat.settings.compactHint": "One line per message, without bubbles or avatars.",
