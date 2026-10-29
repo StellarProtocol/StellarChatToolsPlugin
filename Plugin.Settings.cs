@@ -10,7 +10,7 @@ namespace Stellar.ChatTools;
 /// The settings window (<c>chattools.settings</c>), toggled by the title-bar ⚙ of the chat window. A SEPARATE window,
 /// not a drawer inside <c>chattools.main</c>: the inline drawer squeezed the log and got messy in a short window, and
 /// the chat layout must never change when settings open. Content: auto-reply, All-tab channels (.AllTabFilter.cs), translation (.Translate.cs), whisper
-/// history (.WhisperHistory.Settings.cs) and the channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
+/// history (.WhisperHistory.Settings.cs), compact mode (.Compact.cs), window opacity (.WindowOpacity.cs) and the channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
 ///
 /// Placement: re-centred over the chat window's CURRENT rect on EVERY open (clamped on-screen) — it reads as a sheet
 /// over the chat, so it should open where the chat is now, not wherever it was last dragged. While open it can be
@@ -69,6 +69,7 @@ public sealed partial class Plugin
     private void CloseSettings()
     {
         FlushAutoReplyText();   // .Config.cs — a typed, un-submitted reply is saved on close
+        FlushOpacity();         // .WindowOpacity.cs — a debounced slider value is saved on close
         _settingsOpen = false;
         _settingsWindow?.SetVisible(false);
     }
@@ -78,6 +79,7 @@ public sealed partial class Plugin
     private void TickSettings(float _)
     {
         TickAutoReplySave();    // .Config.cs — debounced save of a typed reply (runs while closed too)
+        TickOpacitySave();      // .WindowOpacity.cs — debounced save of the opacity slider (runs while closed too)
         if (!_settingsOpen) return;
         if (!_window.IsShown) { CloseSettings(); return; }
         if (!_settingsWindow.IsShown) return;   // first open: mount lands in a later band
@@ -181,6 +183,11 @@ public sealed partial class Plugin
 
         // Compact messages (.Compact.cs): one-line rows instead of bubbles, switched live.
         BuildCompactSettings(),
+
+        new SeparatorElement(),
+
+        // Window opacity (.WindowOpacity.cs): optional override of the framework opacity for the chat window only.
+        BuildOpacitySettings(),
 
         new SeparatorElement(),
 

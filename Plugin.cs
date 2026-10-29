@@ -92,6 +92,9 @@ public sealed partial class Plugin : IStellarPlugin
                     // are RowElement.ConstrainsWindowMinWidth, so it follows the current language's natural widths.
                     MinWidth = 480f, MinHeight = 260f,
                     MaxWidth = 1000f, MaxHeight = 1100f,
+                    // ⚙ "Custom window opacity" (.WindowOpacity.cs): null follows the framework's global opacity; a value
+                    // overrides it for THIS window only (polled live — frame alpha only, content stays solid).
+                    FrameOpacity = ChatFrameOpacity,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕

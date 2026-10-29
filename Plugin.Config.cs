@@ -37,6 +37,7 @@ public sealed partial class Plugin
         LoadTranslateOutConfig();   // .TranslateOut.Menu.cs — recent outgoing languages ("translate.outRecent")
         LoadCompactConfig();   // .Compact.cs — compact one-line messages ("display.compactMessages"), off by default
         LoadAllTabConfig();   // .AllTabFilter.cs — channels hidden from the All tab ("allTab.hiddenChannels"), none by default
+        LoadOpacityConfig();   // .WindowOpacity.cs — main-window opacity override ("display.customOpacity.*"), off by default
     }
 
     // The persisted default channel target, 0..3 only: Whisper (4) needs a picked conversation, so it is never a
