@@ -82,7 +82,9 @@ public sealed partial class Plugin
         {
             new TextElement(() => _loc.T("chat.translate.targetLabel")),
             // ~52 languages → a capped, scrollable popup (DropdownElement.MaxVisibleRows), not a screen-tall list.
-            new DropdownElement(TrTargetIndex, TrTargetOptions, OnPickTrTarget) { MaxVisibleRows = 12 },
+            // Pill = house-style trigger + list (framework ≥ 2.28.0, same as MultiTool's Band Mute dropdown). The Pill list
+            // is only as wide as its trigger, so a fixed Width keeps long names ("Bahasa Indonesia (…)") from being cut.
+            new DropdownElement(TrTargetIndex, TrTargetOptions, OnPickTrTarget, Width: 220f) { MaxVisibleRows = 12, Style = DropdownStyle.Pill },
         }, Gap: 6f),
         new RowElement(new HudElement[]
         {
