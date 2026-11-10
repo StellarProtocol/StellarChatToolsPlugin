@@ -95,6 +95,13 @@ public sealed partial class Plugin : IStellarPlugin
                     // ⚙ "Custom window opacity" (.WindowOpacity.cs): null follows the framework's global opacity; a value
                     // overrides it for THIS window only (polled live — frame alpha only, content stays solid).
                     FrameOpacity = ChatFrameOpacity,
+                    // Framework pre-build (fw 2.30.0): built at login, filled off-screen once in the world (behind the
+                    // loading screen), so the first open no longer pays the ~160 ms mount. The fill runs the value Funcs
+                    // while hidden — they are safe: IsShown stays false (no whisper marked read, tab hotkeys dormant),
+                    // the at-bottom report only clears the "N new" count, and avatar misses just start their background
+                    // reads early. No PrebuildSignature: the log is a recycled VirtualList pool, so new messages only
+                    // re-bind built rows — a refill per message would be pure cost.
+                    Prebuild = true,
                 },
                 BuildRoot(),   // .Window.cs — element tree built ONCE; Funcs re-pull live state each refresh
                 TitleTrailing: BuildTitleGear(),   // .Settings.cs — settings ⚙ in the title bar, before the ✕
