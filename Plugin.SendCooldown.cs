@@ -208,7 +208,7 @@ public sealed partial class Plugin
     }
 
     // Clicks are always wired; a disabled pill is simply a no-op (DoSend re-checks everything).
-    private HudElement BuildSendPill() => BuildPill(SendLabel, SendText, SendFill, DoSend);
+    private HudElement BuildSendPill() => BuildPill(SendLabel, SendText, SendFill, () => DoSend());
 
     // ── Counter ────────────────────────────────────────────────────────────────────────────────────────────────────
     // Hidden until the draft is near the cap; same raw-length count as before (a <sprite=N> tag counts its characters,

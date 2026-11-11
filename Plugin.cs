@@ -154,6 +154,8 @@ public sealed partial class Plugin : IStellarPlugin
         // Outgoing-translate language menu (.TranslateOut.Menu.cs) behind the composer 文A pill; same cursor-popup pattern.
         _trOutMenuWindow = RegisterTrOutMenuWindow();
         _services.Framework.Update += TickTrOutMenu;
+        // Enter in the composer (.ComposerEnter.cs): gives the keyboard back once a send-and-leave Enter is released.
+        _services.Framework.Update += TickComposerEnter;
 
         // Stellar menu tile — the second way to open the chat besides the hotkey. "ChatTools" is the product name (also
         // the stable pin identity), so it stays unlocalized like the other plugins' product-name tiles. Show, not
@@ -225,6 +227,7 @@ public sealed partial class Plugin : IStellarPlugin
         try { _services.Framework.Update -= TickSettings; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickMsgMenu; } catch { /* swallow */ }
         try { _services.Framework.Update -= TickTrOutMenu; } catch { /* swallow */ }
+        try { _services.Framework.Update -= TickComposerEnter; } catch { /* swallow */ }
         // Every remaining step in its own guard: one throwing (a half-torn-down service, a destroyed window) must not
         // skip the rest — above all the history flush and the GPU texture release.
         Safe(DisposeTabHotkeys);       // .TabHotkeys.cs

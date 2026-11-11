@@ -90,7 +90,8 @@ public sealed partial class Plugin
                 // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
                 // No AutoFocus: opening the window (F12, the Stellar menu tile, a reopen) leaves the keyboard with the game —
                 // the focus hotkey (.TabHotkeys.cs), a click, or a tab / emoji / translate / send action puts it here.
-                new CellElement(new InputElement(() => _inputText, s => { SetInput(s); DoSend(); }, 160f, OnChange: SetInput)
+                // Enter: send, then leave the input (.ComposerEnter.cs — shared with the Return focus hotkey, one owner per press).
+                new CellElement(new InputElement(() => _inputText, OnComposerSubmit, 160f, OnChange: SetInput)
                     { RichEmoji = true, FocusRequest = () => _composerFocusSeq, Placeholder = ComposerPlaceholder,
                       Locked = TrOutBusy, InsertRequest = () => (_emojiInsertSeq, _emojiInsertText) }, Weight: 1f),
                 new ConditionalElement(CounterVisible, new TextElement(CharCounter, CounterColor, NoWrap: true)),   // .SendCooldown.cs
@@ -161,23 +162,25 @@ public sealed partial class Plugin
     // Allocation-free "is there someone to send to" (polled every refresh by CanSendNow); mirrors ResolveTarget.
     private bool HasSendTarget() => _sendTargetIndex != 4 || _selectedPeer != 0;
 
-    // Enter and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the draft: the field's
-    // Enter strip already left the text in place, and _inputText is only cleared on a real send.
-    private void DoSend()
+    // Enter (.ComposerEnter.cs) and the Send pill. A cooling-down target (.SendCooldown.cs) refuses the send and KEEPS the
+    // draft: the field's Enter strip already left the text in place, and _inputText is only cleared on a real send.
+    // True only when the draft actually went out (Enter then leaves the input; a refusal keeps the focus for a retry).
+    private bool DoSend()
     {
-        if (string.IsNullOrWhiteSpace(_inputText)) return;
-        if (TrOutBusy() || _inputText.Length > MaxMessageLength) return;   // .TranslateOut.cs — translating / over the cap
-        if (CoolingDown()) return;                 // .SendCooldown.cs
-        if (ResolveTarget() is not { } target) return;
+        if (string.IsNullOrWhiteSpace(_inputText)) return false;
+        if (TrOutBusy() || _inputText.Length > MaxMessageLength) return false;   // .TranslateOut.cs — translating / over the cap
+        if (CoolingDown()) return false;           // .SendCooldown.cs
+        if (ResolveTarget() is not { } target) return false;
         var text = _inputText;
         // Game dispatcher — no packet construction, no local echo. A send that never left the client (no live connection)
         // is reported before Send returns (.SendCooldown.cs TrySendNow): the draft is then KEPT, nothing below runs.
-        if (!TrySendNow(() => _chat.Send(target, text))) return;
+        if (!TrySendNow(() => _chat.Send(target, text))) return false;
         NoteSelfSend(SendChannel(), text);         // .Bubbles.cs — learn our identity from the echo (it can't arrive during Send)
         NoteSendDispatched(text);                  // .SendCooldown.cs — grey Send until the reply; a refusal restores the draft
         JumpLogToBottom();                         // .NewBelow.cs — own send: follow it to the bottom, like chat apps
         _inputText = string.Empty;                 // FieldBinding clears the composer field on the next poll
         ResetTrOut();                              // .TranslateOut.cs — a send ends the translate status line
+        return true;
     }
 
     // True when the phrase was actually sent (false: blank, no target, the target is cooling down, or it never left the
