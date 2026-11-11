@@ -32,9 +32,34 @@ public sealed partial class Plugin
     private const int CounterShowAt   = 100;   // counter hidden below this many characters
     private const int CounterDangerAt = 130;   // orange (warning) from CounterShowAt, red from here up to the 140 cap
     private const float SendFillAlpha = 0.70f; // Send pill = the channel colour, stronger than the chip's 0.25 tint
-    private const float DisabledFillAlpha = 0.16f;
-    private static readonly ColorRgba CounterWarn   = new(1.00f, 0.62f, 0.20f);
-    private static readonly ColorRgba CounterDanger = new(1.00f, 0.33f, 0.33f);
+    // Warning / error colours = the theme's status colours (fw 2.30.0 IThemeStatusColors): they follow the theme (the
+    // Light preset darkens them) instead of fixed orange/red. Read live — a struct copy, no allocation.
+    private ColorRgba CounterWarn   => _services.Theme.Colors.Caution;
+    private ColorRgba CounterDanger => _services.Theme.Colors.Danger;
+
+    // Disabled pill = RECESSED (house rule 22, Stellar-Design-Language.md): a sunken fill DARKER than the surface it sits
+    // on — black @28 % — with a faint label, no outline ring, same size/radius. Mirrors the framework's internal
+    // StellarStyle.DisabledFill/DisabledLabel. The fill is drawn translucent (the renderer composites it over the actual
+    // surface = Over(shade, surface)), like TabTrackFill, so it stays right under the custom window opacity too.
+    private static readonly ColorRgba DisabledShade = new(0f, 0f, 0f, 0.28f);
+    private const float DisabledLabelAlpha = 0.32f;        // text @32 % …
+    private const float DisabledLabelMinContrast = 2.0f;   // … raised until 2:1 on the sunken fill (Light themes)
+
+    // Per-call-site cache: the label only changes with the theme, so the contrast loop runs once per colour change.
+    private sealed class DisabledLabelCache { public ColorRgba Text, Surface, Label; public bool Valid; }
+    private readonly DisabledLabelCache _sendDisabledLabel = new(), _addDisabledLabel = new();
+
+    private ColorRgba DisabledLabel(ColorRgba surface, DisabledLabelCache cache)
+    {
+        var text = _services.Theme.Colors.MenuText;
+        if (cache.Valid && text.Equals(cache.Text) && surface.Equals(cache.Surface)) return cache.Label;
+        var bg = Over(DisabledShade, surface);
+        float lb = Luminance(bg), a = DisabledLabelAlpha;
+        while (a < 1f && ContrastRatio(Luminance(Over(text with { A = a }, bg)), lb) < DisabledLabelMinContrast)
+            a = MathF.Min(1f, a + 0.04f);
+        cache.Text = text; cache.Surface = surface; cache.Label = text with { A = a }; cache.Valid = true;
+        return cache.Label;
+    }
 
     // IFramework.TimeNow at which each channel's optimistic hold ends (absent = no send awaiting its reply). Same clock for
     // write and read, compared only as a difference (the epoch is arbitrary) — Framework-Interop-Foundation.md.
@@ -169,15 +194,15 @@ public sealed partial class Plugin
     }
 
     // Send pill colours: the target channel's colour as a strong fill with a contrast-floored label (lifted toward
-    // white, or black on a light channel colour); greyed while it can't send; the refusal notice in the danger red.
+    // white, or black on a light channel colour); recessed while it can't send; the refusal notice in the danger red.
+    // The pill sits directly on the window frame, so its surface is the menu background.
     private ColorRgba? SendFill()
-        => CanSendNow() ? TabBaseColor(TargetTab()) with { A = SendFillAlpha }
-                        : _services.Theme.Colors.MenuMuted with { A = DisabledFillAlpha };
+        => CanSendNow() ? TabBaseColor(TargetTab()) with { A = SendFillAlpha } : DisabledShade;
 
     private ColorRgba? SendText()
     {
         if (RefusedFlashing()) return EnsureContrast(CounterDanger, TabTrackColor(), TabActiveMinContrast);
-        if (!CanSendNow()) return _services.Theme.Colors.MenuMuted;
+        if (!CanSendNow()) return DisabledLabel(_services.Theme.Colors.MenuBackground with { A = 1f }, _sendDisabledLabel);
         var fill = Over(TabBaseColor(TargetTab()) with { A = SendFillAlpha }, TabTrackColor());
         return EnsureContrast(new ColorRgba(1f, 1f, 1f), fill, TabActiveMinContrast);
     }

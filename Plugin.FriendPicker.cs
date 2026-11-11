@@ -131,9 +131,10 @@ public sealed partial class Plugin
             OnClose: CloseFriendPicker));   // framework invokes this on Escape / click-outside
     }
 
-    // The friend-list green (the online dot's colour), contrast-floored against the panel like the tab labels.
+    // The friend-list green = the theme's Success colour (fw 2.30.0; the Light preset darkens it), still contrast-floored
+    // against the panel like the tab labels.
     private ColorRgba? OnlineTextColor()
-        => EnsureContrast(new ColorRgba(0.24f, 0.84f, 0.47f), _services.Theme.Colors.MenuBackground with { A = 1f }, TabMutedMinContrast);
+        => EnsureContrast(_services.Theme.Colors.Success,_services.Theme.Colors.MenuBackground with { A = 1f }, TabMutedMinContrast);
 
     private void SetFriendFilter(string s)
     {

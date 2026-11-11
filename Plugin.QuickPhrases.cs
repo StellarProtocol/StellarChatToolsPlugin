@@ -131,14 +131,19 @@ public sealed partial class Plugin
         return t.Length > 0 && !_quickPhrases.Contains(t);
     }
 
-    // Add pill = the Send pill's look in the accent colour: live when there is something new to add, greyed otherwise.
+    // Add pill = the Send pill's look in the accent colour: live when there is something new to add, recessed otherwise
+    // (.SendCooldown.cs DisabledShade / DisabledLabel).
     private ColorRgba? AddPillFill() => CanAddQuickPhrase()
         ? _services.Theme.Colors.MenuAccent with { A = SendFillAlpha }
-        : _services.Theme.Colors.MenuMuted with { A = DisabledFillAlpha };
+        : DisabledShade;
 
     private ColorRgba? AddPillText() => CanAddQuickPhrase()
         ? EnsureContrast(new ColorRgba(1f, 1f, 1f), Over(_services.Theme.Colors.MenuAccent with { A = SendFillAlpha }, TabTrackColor()), TabActiveMinContrast)
-        : _services.Theme.Colors.MenuMuted;
+        : DisabledLabel(QuickPanelSurface(), _addDisabledLabel);
+
+    // The popover's surface: the framework PanelElement background (WindowBuilder.Panel.cs PanelBgColor = the menu
+    // background lifted 6 % toward white, opaque).
+    private ColorRgba QuickPanelSurface() => Mix(_services.Theme.Colors.MenuBackground, new ColorRgba(1f, 1f, 1f), 0.06f);
 
     private void AddQuickPhrase()
     {
