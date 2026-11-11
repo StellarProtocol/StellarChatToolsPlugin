@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "창 배경만 흐려지고 글자와 버튼은 그대로 표시됩니다.",
   "chat.settings.opacityHintFollow": "프레임워크 설정({0}%)을 사용합니다. 창 배경만 흐려지고 글자와 버튼은 그대로 표시됩니다.",
   "chat.settings.opacityLabel": "불투명도",
+  "chat.settings.opacityFollowLine": "Stellar 불투명도 사용 · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "Stellar 불투명도 사용",
   "chat.settings.section.display": "표시",
   "chat.settings.section.whispers": "귓속말",
   "chat.settings.status.allTab": "전체 탭에 {1}개 중 {0}개 채널 표시",

@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "薄くなるのはウィンドウの背景だけで、文字やボタンはそのまま表示されます。",
   "chat.settings.opacityHintFollow": "フレームワークの設定（{0}%）を使用します。薄くなるのはウィンドウの背景だけで、文字やボタンはそのまま表示されます。",
   "chat.settings.opacityLabel": "不透明度",
+  "chat.settings.opacityFollowLine": "Stellar の不透明度を使用 · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "Stellar の不透明度を使用",
   "chat.settings.section.display": "表示",
   "chat.settings.section.whispers": "ウィスパー",
   "chat.settings.status.allTab": "「すべて」タブに {0}/{1} チャンネル",

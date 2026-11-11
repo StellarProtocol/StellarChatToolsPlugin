@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "เฉพาะพื้นหลังหน้าต่างเท่านั้นที่จางลง ข้อความและปุ่มยังคงชัดเจน",
   "chat.settings.opacityHintFollow": "ใช้ค่าจากการตั้งค่าเฟรมเวิร์ก ({0}%) เฉพาะพื้นหลังหน้าต่างเท่านั้นที่จางลง ข้อความและปุ่มยังคงชัดเจน",
   "chat.settings.opacityLabel": "ความทึบ",
+  "chat.settings.opacityFollowLine": "ใช้ความทึบของ Stellar · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "ใช้ความทึบของ Stellar",
   "chat.settings.section.display": "การแสดงผล",
   "chat.settings.section.whispers": "กระซิบ",
   "chat.settings.status.allTab": "แท็บทั้งหมดแสดง {0} จาก {1} แชนเนล",

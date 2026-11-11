@@ -135,16 +135,27 @@ public sealed partial class Plugin
             new TextElement(() => _loc.T("chat.settings.colorsHint"), Color: () => MutedColor()));
     }
 
-    // [muted "Opacity"] [round-knob slider] [78%] [?]. While the override is OFF the row stays (nothing jumps) but the
-    // slider is disabled (the framework dims it and ignores the pointer) and the value reads muted.
+    // ON: [muted "Opacity"] [round-knob slider] [78%] [?]. OFF: [muted "Uses Stellar opacity · 90%"] [?] — the slider
+    // has no visible disabled state (Interactable=false still draws a pink track + white knob, KB WindowBuilder-Patterns
+    // "Two-column settings window"), so it is swapped out rather than greyed. Both states sit in one Row pinned by a
+    // 28 px strut (the Row centres them), so the row — and the window — keep their height; the "?" stays outside the
+    // swap so the column still lines up (house rule 17).
     private HudElement BuildOpacitySliderRow(string section) => new RowElement(new HudElement[]
     {
-        new TextElement(() => _loc.T("chat.settings.opacityLabel"), Color: () => MutedColor(), Width: OpacityLabelW,
-            NoWrap: true) { Ellipsize = true },
-        new CellElement(new SliderElement(() => _customOpacity, SetCustomOpacity, OpacityMin, OpacityMax,
-            () => _customOpacityOn) { SquareHandle = true, HandleSize = 14f }, Weight: 1f),
-        new TextElement(OpacityValueText, Color: () => _customOpacityOn ? TextColor() : MutedColor(), Width: OpacityValueW,
-            Align: TextAlign.Right, NoWrap: true),
+        new CellElement(new RowElement(new HudElement[]
+        {
+            new SpacerElement(1f, StylePillH),
+            new CellElement(new ConditionalElement(() => _customOpacityOn, new RowElement(new HudElement[]
+            {
+                new TextElement(() => _loc.T("chat.settings.opacityLabel"), Color: () => MutedColor(), Width: OpacityLabelW,
+                    NoWrap: true) { Ellipsize = true },
+                new CellElement(new SliderElement(() => _customOpacity, SetCustomOpacity, OpacityMin, OpacityMax)
+                    { SquareHandle = true, HandleSize = 14f }, Weight: 1f),
+                new TextElement(OpacityValueText, Color: () => TextColor(), Width: OpacityValueW,
+                    Align: TextAlign.Right, NoWrap: true),
+            }, Gap: SetGap),
+                new TextElement(OpacityFollowText, Color: () => MutedColor(), NoWrap: true) { Ellipsize = true }), Weight: 1f),
+        }, Gap: 0.01f), Weight: 1f),
         HelpDot(new HelpTip("chat.settings.opacityLabel", section, () => _loc.T("chat.settings.help.opacityLevel"))),
     }, Gap: SetGap);
 

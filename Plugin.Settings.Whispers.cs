@@ -17,11 +17,11 @@ public sealed partial class Plugin
     // box measures a little taller than its 28 px minimum.
     private const float ReplySlotH   = StylePillH + SetGap + LineH + 2f;                              // 56
     private const float WhispersBodyH = StyleChipH + ReplySlotH + StyleChipH + LineH + StylePillH + 4f * SetGap;   // 176
-    // Confirm panel = Tile box (PadY 8) of question (2 lines) · consequence (≤4 lines) · Delete/Cancel, gaps SetGap.
+    // Confirm panel = Tile box (PadY 8) of question (≤2 lines) · consequence (≤4 lines) · Delete/Cancel, gaps SetGap,
+    // top-aligned; the tile is pinned to the full body height by a strut, so spare height falls BELOW the pills.
     private const float ConfirmPadX = 10f, ConfirmPadY = 8f;
-    private const float ConfirmQuestionH = 36f;   // two bold-13 lines
-    private const float ConfirmNoteH = WhispersBodyH - 2f * ConfirmPadY - ConfirmQuestionH - StylePillH - 2f * SetGap;   // 84
-    private const float ConfirmInnerW = SetInnerW - 2f * ConfirmPadX;
+    private const float ConfirmInnerH = WhispersBodyH - 2f * ConfirmPadY;   // 160
+    private const float ConfirmInnerW = SetInnerW - 2f * ConfirmPadX - 1f;   // − the 1 px height strut beside the column
     private const float ConfirmCellW  = (ConfirmInnerW - SetGap) / 2f;   // each of Delete / Cancel
     private const float ClearLabelW   = SetInnerW - 2f * StylePillPadX;   // the full-width Clear pill's label box
 
@@ -69,17 +69,24 @@ public sealed partial class Plugin
     private readonly ContrastCache _clearedText = new();
 
     // The house destructive confirm, in place: Tile box → bold question, muted consequence, [Delete | Cancel].
-    private HudElement BuildHistoryConfirm() => new BubbleElement(new ColumnElement(new HudElement[]
+    // The texts take their natural wrapped height (MaxLines caps them) — a fixed TextElement.Height centres its lines in
+    // the box, which left a big gap between question and note. The inner Row = a ConfirmInnerH strut (keeps the tile at
+    // the full WHISPERS body height, house rule 14) + an always-true Fill Conditional that top-aligns the column (a Row
+    // centres its children; KB WindowBuilder-Patterns "Top-align inside a row"), so the spare height sits under the pills.
+    private HudElement BuildHistoryConfirm() => new BubbleElement(new RowElement(new HudElement[]
     {
-        new TextElement(() => _loc.T("chat.history.confirmQuestion"), Color: () => TextColor(), FontSize: 13)
-            { Bold = true, MaxLines = 2, Height = ConfirmQuestionH },
-        new TextElement(() => _loc.T("chat.history.confirmNote"), Color: () => MutedColor())
-            { MaxLines = 4, Height = ConfirmNoteH },
-        PillPair(
-            DangerButton(() => _loc.T("chat.history.delete"), ConfirmClearHistory, ConfirmCellW - 2f * StylePillPadX, TileColor),
-            NeutralButton(() => _loc.T("chat.history.cancel"), CancelClearHistory, ConfirmCellW - 2f * StylePillPadX, TileColor),
-            ConfirmCellW),
-    }, Gap: SetGap))
+        new SpacerElement(1f, ConfirmInnerH),
+        new CellElement(new ConditionalElement(() => true, new ColumnElement(new HudElement[]
+        {
+            new TextElement(() => _loc.T("chat.history.confirmQuestion"), Color: () => TextColor(), FontSize: 13)
+                { Bold = true, MaxLines = 2 },
+            new TextElement(() => _loc.T("chat.history.confirmNote"), Color: () => MutedColor()) { MaxLines = 4 },
+            PillPair(
+                DangerButton(() => _loc.T("chat.history.delete"), ConfirmClearHistory, ConfirmCellW - 2f * StylePillPadX, TileColor),
+                NeutralButton(() => _loc.T("chat.history.cancel"), CancelClearHistory, ConfirmCellW - 2f * StylePillPadX, TileColor),
+                ConfirmCellW),
+        }, Gap: SetGap), Fill: true), Weight: 1f),
+    }, Gap: 0.01f))
     {
         FillColorFn = () => Fade(TileColor()), CornerRadius = TileRadius, PaddingX = ConfirmPadX, PaddingY = ConfirmPadY,
     };

@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "Only the window background fades; text and buttons stay solid.",
   "chat.settings.opacityHintFollow": "Uses the framework setting ({0}%). Only the window background fades; text and buttons stay solid.",
   "chat.settings.opacityLabel": "Opacity",
+  "chat.settings.opacityFollowLine": "Uses Stellar opacity · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "Uses Stellar opacity",
   "chat.settings.section.display": "Display",
   "chat.settings.section.whispers": "Whispers",
   "chat.settings.status.allTab": "All tab shows {0} of {1} channels",

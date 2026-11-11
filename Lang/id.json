@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "Hanya latar jendela yang memudar; teks dan tombol tetap jelas.",
   "chat.settings.opacityHintFollow": "Memakai pengaturan framework ({0}%). Hanya latar jendela yang memudar; teks dan tombol tetap jelas.",
   "chat.settings.opacityLabel": "Opasitas",
+  "chat.settings.opacityFollowLine": "Memakai opasitas Stellar · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "Memakai opasitas Stellar",
   "chat.settings.section.display": "Tampilan",
   "chat.settings.section.whispers": "Bisikan",
   "chat.settings.status.allTab": "Tab Semua menampilkan {0} dari {1} kanal",

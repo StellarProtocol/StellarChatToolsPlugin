@@ -115,6 +115,8 @@
   "chat.settings.opacityHint": "Ang background lang ng window ang lumalabo; nananatiling malinaw ang teksto at mga button.",
   "chat.settings.opacityHintFollow": "Ginagamit ang setting ng framework ({0}%). Ang background lang ng window ang lumalabo; nananatiling malinaw ang teksto at mga button.",
   "chat.settings.opacityLabel": "Opacity",
+  "chat.settings.opacityFollowLine": "Ginagamit ang opacity ng Stellar · {0}%",
+  "chat.settings.opacityFollowLineNoPct": "Ginagamit ang opacity ng Stellar",
   "chat.settings.section.display": "Display",
   "chat.settings.section.whispers": "Mga bulong",
   "chat.settings.status.allTab": "Ipinapakita ng tab na Lahat ang {0} sa {1} channel",
