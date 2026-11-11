@@ -6,67 +6,22 @@ using Stellar.Abstractions.Services;
 namespace Stellar.ChatTools;
 
 /// <summary>
-/// The Settings window's "Whisper history" section (after Translation): the keep toggle, the where/how-much note, and a
-/// two-step "Clear saved whisper history" button with this character's stats on the line below it. First click arms it (solid red,
-/// "Click again to delete", a Cancel pill + a scope note; reverts by itself after <see cref="HistConfirmSec"/>); the
-/// second deletes this character's files on the I/O worker and drops the in-memory copy at once.
+/// The logic behind the Settings window's whisper-history rows (the UI is in .Settings.Whispers.cs): the keep toggle,
+/// this character's stats line, and "Clear saved whisper history" with the house destructive confirm — the click opens an
+/// in-place confirm panel (bold question, muted consequence, Danger "Delete" + Neutral "Cancel"); Delete removes this
+/// character's files on the I/O worker and drops the in-memory copy at once, then the stats line says "Cleared" for a
+/// few seconds right above the button that was clicked. Nothing saved (0 conversations) → the Clear pill is recessed.
 /// </summary>
 public sealed partial class Plugin
 {
-    private const float HistConfirmSec = 5f;
     private const float HistClearedSec = 3f;
-    private static readonly ColorRgba DangerRed = new(0.90f, 0.30f, 0.30f);
-    private const float DangerIdleFillAlpha = 0.10f;
-    private const float CancelPillMaxW = 160f;   // well above the widest locale's "Cancel" (fil "Kanselahin"); a cap, not a size
 
-    private float _histConfirmUntil;   // > now = armed
+    private bool _histConfirming;      // the delete confirm panel is showing (Settings open only)
     private float _histClearedUntil;   // > now = show "Cleared" in the stats slot
     private int _histStatsBuiltRev = -1;
     private string? _histStatsTpl, _histStatsSub, _histStatsName;
     private string _histStatsText = "";
-
-    private bool HistConfirming() => _histConfirmUntil > _services.Framework.TimeNow;
-
-    private HudElement BuildWhisperHistorySettings() => new ColumnElement(new HudElement[]
-    {
-        new TextElement(() => _loc.T("chat.history.title"), Emphasis: true),
-        new RowElement(new HudElement[]
-        {
-            new ToggleElement(() => "", () => _keepWhisperHistory, SetKeepWhisperHistory),
-            new TextElement(() => _loc.T("chat.history.keep")),
-        }, Gap: 6f),
-        new TextElement(() => _loc.T("chat.history.note"), MutedCol),
-        new RowElement(new HudElement[]
-        {
-            // Danger pill (28 tall, the composer pill shape): red outline + faint red wash at rest, solid red when armed.
-            // The bare Bubble sits DIRECTLY in this Column-stretched Row — NOT in BuildPill's Cell. Its label changes
-            // (idle ↔ armed, language), and in a natural Cell the parent-width cap can only shrink: "Click again to
-            // delete" pinned it narrow and "Clear saved whisper history" then spilled out of the box (.SendTarget.cs
-            // PillBubble). Here the cap is the full row, so it hugs any label and only wraps (grows taller, hence no
-            // NoWrap) if a translation is wider than the window.
-            PillBubble(new HudElement[]
-                {
-                    new TextElement(() => _loc.T(HistConfirming() ? "chat.history.confirm" : "chat.history.clear"),
-                        () => HistConfirming() ? new ColorRgba(1f, 1f, 1f) : EnsureContrast(DangerRed, _services.Theme.Colors.MenuBackground, 3f),
-                        Emphasis: true),
-                },
-                () => HistConfirming() ? DangerRed : DangerRed with { A = DangerIdleFillAlpha },
-                OnClearHistoryClick, outline: () => DangerRed),
-            // Its parent is the Conditional (sized from it), so it gets a static cap instead — same shrink-only trap.
-            new ConditionalElement(HistConfirming,
-                PillBubble(new HudElement[]
-                    {
-                        new TextElement(() => _loc.T("chat.history.cancel"), () => _services.Theme.Colors.MenuText,
-                            Emphasis: true, NoWrap: true),
-                    },
-                    () => _services.Theme.Colors.MenuText with { A = 0.08f }, CancelClearHistory, maxWidth: CancelPillMaxW)),
-        }, Gap: 6f),
-        // The stats get their OWN line. Beside the pill, the stats cell pushed the row's preferred width past the window,
-        // and the layout then shrank EVERY child toward its min — the pill too, so its NoWrap label spilled across the
-        // stats. The pills alone fit (idle or armed), so each keeps its label width; a long name here just wraps.
-        new TextElement(HistStatsText, MutedCol),
-        new ConditionalElement(HistConfirming, new TextElement(() => _loc.T("chat.history.confirmNote"), MutedCol)),
-    }, Gap: 4f);
+    private int _histStatsConvs;
 
     private void SetKeepWhisperHistory(bool on)
     {
@@ -76,20 +31,22 @@ public sealed partial class Plugin
         SaveWhisperHistoryConfig();     // .Config.cs
     }
 
-    private void OnClearHistoryClick()
+    // Clear pill → the confirm panel (only while there is something to delete — the pill is recessed otherwise).
+    private void OpenClearHistoryConfirm() { if (HistHasSaved()) _histConfirming = true; }
+
+    private void ConfirmClearHistory()
     {
-        if (!HistConfirming()) { _histConfirmUntil = _services.Framework.TimeNow + HistConfirmSec; return; }
-        _histConfirmUntil = 0f;
+        _histConfirming = false;
         ClearWhisperHistory();
     }
 
-    private void CancelClearHistory() => _histConfirmUntil = 0f;
+    private void CancelClearHistory() => _histConfirming = false;
 
-    // From TickWhisperHistory: nothing to do per tick — HistConfirming() compares the clock itself — except dropping a
-    // stale arm when the settings window closes, so it never reopens armed.
+    // From TickWhisperHistory: drop a stale confirm when the settings window closed some other way (chat hidden, zone
+    // load), so it never reopens on the confirm panel. CloseSettings clears it too.
     private void TickHistoryConfirm(float now)
     {
-        if (_histConfirmUntil > 0f && (!_settingsOpen || now >= _histConfirmUntil)) _histConfirmUntil = 0f;
+        if (_histConfirming && !_settingsOpen) _histConfirming = false;
     }
 
     // Delete this character's saved history: in-memory now, files on the worker (queued AFTER any pending flush, so
@@ -121,10 +78,28 @@ public sealed partial class Plugin
         _services.Log.Info($"[ChatTools] whisper history cleared ({_histKey})");
     }
 
-    // "<character> · N conversation(s) · M message(s)" from the in-memory index (cheap; rebuilt only when it changes).
+    private bool HistJustCleared() => _histClearedUntil > _services.Framework.TimeNow;
+
+    // Something to delete: the folder is known and at least one conversation has saved messages. Polled by the Clear
+    // pill's enabled Func — reads the cached count (EnsureHistStats walks the index only when it changed).
+    private bool HistHasSaved()
+    {
+        if (_histKey == null) return false;
+        EnsureHistStats();
+        return _histStatsConvs > 0;
+    }
+
+    // "<character> · N conversation(s) · M message(s)" from the in-memory index; "Cleared" right after a delete.
     private string HistStatsText()
     {
-        if (_histClearedUntil > _services.Framework.TimeNow) return _loc.T("chat.history.cleared");
+        if (HistJustCleared()) return _loc.T("chat.history.cleared");
+        EnsureHistStats();
+        return _histStatsText;
+    }
+
+    // Rebuilt only when the index (rev), the language or the character name changes (cheap per poll otherwise).
+    private void EnsureHistStats()
+    {
         var tpl = _loc.T("chat.history.stats");
         // The "{0} · {1} · {2}" frame is the same in every locale, so it can't detect a language switch — a count
         // template (which differs per locale) is the cache key too.
@@ -133,7 +108,7 @@ public sealed partial class Plugin
         if (_histStatsBuiltRev == _histStatsRev && string.Equals(tpl, _histStatsTpl, StringComparison.Ordinal)
             && string.Equals(sub, _histStatsSub, StringComparison.Ordinal)
             && string.Equals(name, _histStatsName, StringComparison.Ordinal))
-            return _histStatsText;
+            return;
         int convs = 0, msgs = 0;
         foreach (var sp in _saved.Values)
         {
@@ -146,8 +121,8 @@ public sealed partial class Plugin
                 Counted("chat.history.convs", convs), Counted("chat.history.msgs", msgs));
         }
         catch (FormatException) { _histStatsText = tpl; }
+        _histStatsConvs = convs;
         _histStatsBuiltRev = _histStatsRev; _histStatsTpl = tpl; _histStatsSub = sub; _histStatsName = name;
-        return _histStatsText;
     }
 
     // "<n> conversation(s)": every locale ships both .one and .other (identical where the language has no plural, e.g.

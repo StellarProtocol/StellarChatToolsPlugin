@@ -75,7 +75,7 @@ public sealed partial class Plugin
     private void TickWhisperHistory(float _)
     {
         float now = _services.Framework.TimeNow;
-        TickHistoryConfirm(now);   // .WhisperHistory.Settings.cs — the clear button's 5 s confirm timeout
+        TickHistoryConfirm(now);   // .WhisperHistory.Settings.cs — drops the delete confirm once Settings closed
         if (!InStableWorld()) { _uidSince = now; return; }
         long me = 0;
         try { me = _services.PlayerState.CharId; } catch { /* identity not ready */ }

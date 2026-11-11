@@ -146,6 +146,8 @@ public sealed partial class Plugin : IStellarPlugin
         _services.Framework.Update += TickWhisperHistory;
         // Settings (.Settings.cs): its own window, toggled by the title ⚙; centred over the chat on each open and
         // closed with it.
+        // Its "?" help popover (.SettingsHelp.cs) first: Settings is prebuilt and its "?" fills read the popover.
+        _settingsTipWindow = RegisterSettingsTipWindow();
         _settingsWindow = RegisterSettingsWindow();
         _services.Framework.Update += TickSettings;
         // Message right-click menu (.MessageMenu.cs): Copy message; same cursor-popup pattern.
@@ -243,6 +245,7 @@ public sealed partial class Plugin : IStellarPlugin
         Safe(() => _convMenuWindow?.Remove());
         Safe(() => _friendPickerWindow?.Remove());
         Safe(() => _settingsWindow?.Remove());
+        Safe(() => _settingsTipWindow?.Remove());
         Safe(() => _msgMenuWindow?.Remove());
         Safe(() => _trOutMenuWindow?.Remove());
         Safe(DisposeAvatars);          // .Avatars.cs — free the LRU + default avatar textures (GPU memory)
