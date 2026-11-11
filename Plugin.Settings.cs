@@ -9,8 +9,12 @@ namespace Stellar.ChatTools;
 /// <summary>
 /// The settings window (<c>chattools.settings</c>), toggled by the title-bar ⚙ of the chat window. A SEPARATE window,
 /// not a drawer inside <c>chattools.main</c>: the inline drawer squeezed the log and got messy in a short window, and
-/// the chat layout must never change when settings open. Content: auto-reply, All-tab channels (.AllTabFilter.cs), translation (.Translate.cs), whisper
-/// history (.WhisperHistory.Settings.cs), compact mode (.Compact.cs), window opacity (.WindowOpacity.cs) and the channel-colour hint. (Quick phrases are managed in their own popover, .QuickPhrases.cs.)
+/// the chat layout must never change when settings open. House style (Stellar Design Language, user-approved "option A"
+/// 2026-11-12): ToolHeader + two columns of SectionPanels (.Settings.Layout.cs: WHISPERS / TRANSLATION | ALL TAB /
+/// DISPLAY), every setting row ending in a round "?" that opens the shared help popover (.SettingsHelp.cs). No title
+/// bar — the header carries the title and the ✕, and the whole frame drags. The window height is CONSTANT across every
+/// state (auto-reply on/off, the clear-history confirm, recessed controls), so nothing jumps. (Quick phrases are
+/// managed in their own popover, .QuickPhrases.cs.)
 ///
 /// Placement: re-centred over the chat window's CURRENT rect on EVERY open (clamped on-screen) — it reads as a sheet
 /// over the chat, so it should open where the chat is now, not wherever it was last dragged. While open it can be
@@ -25,9 +29,10 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private const string SettingsId = "chattools.settings";
-    // Fixed width (GlassMenu non-resizable: width = DefaultRect.Width, height content-fits). 380 leaves the auto-reply
-    // row (56 label + 4 + 280 field) inside the 12+12 body padding.
-    private const float SettingsW = 380f;
+    // Fixed width (GlassMenu non-resizable: width = DefaultRect.Width, height content-fits). The column maths lives in
+    // .Settings.Layout.cs; 720 holds the longest setting label of every shipped locale (house rule 18 — widen, don't
+    // cram: e.g. fil "I-save ang whisper history sa PC" ≈ 200 px in a 223 px label slot).
+    private const float SettingsW = 720f;
     // The open's first layout can still be settling (first mount, or a parked tree whose content changed while hidden),
     // so the centre is re-applied whenever the measured height changes during this short window after an open.
     private const float SettingsSettleSec = 0.6f;
@@ -46,6 +51,13 @@ public sealed partial class Plugin
             Category:    WindowCategory.Tools,
             Style:       WindowPanelStyle.GlassMenu)
         { StartVisible = false, Closable = true, Draggable = true,
+          // No title bar: the ToolHeader carries the title and the ✕; the whole frame is the drag handle (controls and
+          // lists are skipped by the drag, fw 2.29.1).
+          ShowTitleBar = false,
+          // Built in the background at start-up (Plugin-Performance-Rules §5): two columns of panels is a ~100-element
+          // tree, so the first ⚙ click no longer builds it inline. Its value Funcs are safe while hidden (config fields,
+          // the loc catalog, try-guarded PlayerState.Name).
+          Prebuild = true,
           TitleProvider = () => _loc.T("chat.settings.windowTitle"),   // re-read on a live language switch (.Language.cs)
           ShouldRender = () => _services.ClientState.Phase == GamePhase.World
                             && (_services.ClientState.UiState & GameUIState.Loading) == 0 },
@@ -70,6 +82,8 @@ public sealed partial class Plugin
     {
         FlushAutoReplyText();   // .Config.cs — a typed, un-submitted reply is saved on close
         FlushOpacity();         // .WindowOpacity.cs — a debounced slider value is saved on close
+        CloseSettingsTip();     // .SettingsHelp.cs — the help popover belongs to this window
+        _histConfirming = false;   // .WhisperHistory.Settings.cs — never reopen on the delete confirm
         _settingsOpen = false;
         _settingsWindow?.SetVisible(false);
     }
@@ -81,6 +95,7 @@ public sealed partial class Plugin
         TickAutoReplySave();    // .Config.cs — debounced save of a typed reply (runs while closed too)
         TickOpacitySave();      // .WindowOpacity.cs — debounced save of the opacity slider (runs while closed too)
         if (!_settingsOpen) return;
+        TickSettingsTip();      // .SettingsHelp.cs — re-anchors a just-opened help popover for a few ticks
         if (!_window.IsShown) { CloseSettings(); return; }
         if (!_settingsWindow.IsShown) return;   // first open: mount lands in a later band
         var r = _settingsWindow.Rect;
@@ -90,8 +105,9 @@ public sealed partial class Plugin
             if (Math.Abs(r.Height - _settingsCentredH) > 0.5f) PlaceSettings();
             return;
         }
-        // Content grew while open (auto-reply turned on): the window grows DOWN from its top edge, so keep the
-        // bottom on-screen. Only writes when actually off the bottom (SetRect persists — no per-tick churn).
+        // The height is constant by design, but a live language switch can still re-measure it (a longer colour hint);
+        // the window grows DOWN from its top edge, so keep the bottom on-screen. Only writes when actually off the
+        // bottom (SetRect persists — no per-tick churn).
         float ch = CanvasH();
         if (r.Y + r.Height > ch + 0.5f && r.Y > 0.5f)
             _settingsWindow.SetRect(new WindowRect(r.X, Math.Max(0f, ch - r.Height), r.Width, r.Height));
@@ -144,56 +160,4 @@ public sealed partial class Plugin
         catch (Exception ex) { _services.Log.Warning($"[ChatTools] settings gear icon load failed: {ex.Message}"); }
         return _gearPng;
     }
-
-    // ── Settings content (unchanged from the old inline drawer; the window title replaces its "Settings" header) ──
-    private HudElement BuildSettingsRoot() => new ColumnElement(new HudElement[]
-    {
-        // Auto-reply: capsule toggle + sibling label, then the reply text + cooldown readout.
-        new RowElement(new HudElement[]
-        {
-            new ToggleElement(() => "", () => _autoReplyEnabled, SetAutoReply),
-            new TextElement(() => _loc.T("chat.autoReply.label")),
-        }, Gap: 6f),
-        new ConditionalElement(() => _autoReplyEnabled, new ColumnElement(new HudElement[]
-        {
-            new RowElement(new HudElement[]
-            {
-                new TextElement(() => _loc.T("chat.reply"), Width: 56f),
-                new InputElement(() => _autoReplyText, s => { _autoReplyText = s; SaveAutoReplyText(); }, 280f, OnChange: OnAutoReplyTyped),
-            }, Gap: 4f),
-            new TextElement(() => _loc.TFormat("chat.cooldown", AutoReplyCooldown.TotalSeconds), () => _services.Theme.Colors.MenuMuted),
-        }, Gap: 4f)),
-
-        new SeparatorElement(),
-
-        // All tab (.AllTabFilter.cs): which channels the All tab shows — one toggle chip per channel tab.
-        BuildAllTabSettings(),
-
-        new SeparatorElement(),
-
-        // Translation (.Translate.cs): target language, hover-button toggle, and the privacy note.
-        BuildTranslateSettings(),
-
-        new SeparatorElement(),
-
-        // Whisper history (.WhisperHistory.Settings.cs): keep toggle, storage note, clear-with-confirm + stats.
-        BuildWhisperHistorySettings(),
-
-        new SeparatorElement(),
-
-        // Compact messages (.Compact.cs): one-line rows instead of bubbles, switched live.
-        BuildCompactSettings(),
-
-        new SeparatorElement(),
-
-        // Window opacity (.WindowOpacity.cs): optional override of the framework opacity for the chat window only.
-        BuildOpacitySettings(),
-
-        new SeparatorElement(),
-
-        // Channel colours: the tab strip itself is the legend (each tab wears its channel's colour), so a swatch list
-        // here would only repeat it. One hint pointing at where they are edited — the framework Theme settings
-        // (IColorSlot is read-only to the plugin).
-        new TextElement(() => _loc.T("chat.settings.colorsHint"), () => _services.Theme.Colors.MenuMuted),
-    }, Gap: 4f);
 }

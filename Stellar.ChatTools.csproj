@@ -43,6 +43,9 @@
     <EmbeddedResource Include="Assets/online_dot.png" LogicalName="Stellar.ChatTools.Assets.online_dot.png" />
     <!-- Stellar menu (launcher) tile icon, 128x128 RGBA, read once via GetManifestResourceStream (Plugin.cs). -->
     <EmbeddedResource Include="Resources/chattools-icon.png" LogicalName="Stellar.ChatTools.Resources.chattools-icon.png" />
+    <!-- Settings header glyph: the same two bubbles PRE-DRAWN at the 24 px it is shown (tools/make-settings-icon.py,
+         pixel-hinted; never the 128 px icon scaled down), on the live accent tile (Plugin.Style.Blocks.cs). -->
+    <EmbeddedResource Include="Resources/chattools-settings-24.png" LogicalName="Stellar.ChatTools.Resources.chattools-settings-24.png" />
   </ItemGroup>
   <!-- Local overrides: deploy target and game paths, in Local.props (gitignored). Imported AFTER the
        PackageReferences so a temporary `PackageReference Update/Remove` there (e.g. testing an unreleased local

@@ -22,7 +22,6 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private const string CfgAllTabHidden = "allTab.hiddenChannels";
-    private const float AllTabChipOffMix = 0.35f;   // off-chip text = muted grey pulled 35% toward the track (dimmed)
 
     // Chip order = the tab strip's order and labels (All itself excluded).
     private static readonly ChatTab[] AllTabChips =
@@ -75,41 +74,6 @@ public sealed partial class Plugin
         ResetNewBelow();   // .NewBelow.cs
     }
 
-    // ⚙ settings (.Settings.cs): bold header, muted hint, then the six chips. The toolkit has no wrapping row, so the
-    // prototype's wrapped chip row is two fixed rows of three (it wraps after the third chip at this width anyway).
-    private HudElement BuildAllTabSettings() => new ColumnElement(new HudElement[]
-    {
-        new TextElement(() => _loc.T("chat.settings.allTab.title"), Emphasis: true),
-        new TextElement(() => _loc.T("chat.settings.allTab.hint"), MutedCol),
-        new RowElement(new[] { BuildAllTabChip(AllTabChips[0]), BuildAllTabChip(AllTabChips[1]), BuildAllTabChip(AllTabChips[2]) }, Gap: 5f),
-        new RowElement(new[] { BuildAllTabChip(AllTabChips[3]), BuildAllTabChip(AllTabChips[4]), BuildAllTabChip(AllTabChips[5]) }, Gap: 5f),
-    }, Gap: 4f);
-
-    // One chip = a whole-chip ConditionalElement over two variants, because Bold / Strikethrough are build-time
-    // (init) text properties: ON = bold channel-colour text on the active-tab pill (TabActiveText / TabPillFill, .Tabs.cs);
-    // OFF = dimmed, struck-through regular text on the recessed track fill. The Cond sits OUTSIDE each chip's bubble,
-    // never inside its measured child (WindowBuilder-Patterns.md). No Selected arg: the Selectable's own selected fill
-    // would double the pill (same as the tabs); hover still gets the Selectable's normal wash.
-    private HudElement BuildAllTabChip(ChatTab tab)
-    {
-        var ch = TabChannel(tab)!.Value;
-        HudElement Chip(TextElement label, Func<ColorRgba?> fill, ColorRgba restFill) => new SelectableElement(
-            new BubbleElement(label)
-            {
-                // FillColor = the restore-default fill (explicit, NOT null — null = the themed accent fill).
-                CornerRadius = 13f, PaddingX = 10f, PaddingY = 5f, FillColor = restFill, FillColorFn = fill,
-            },
-            OnClick: () => ToggleAllTabChannel(ch));
-        return new ConditionalElement(() => AllTabShows(ch),
-            Chip(new TextElement(() => _loc.T(TabLabelKey(tab)), () => TabActiveText(tab), Align: TextAlign.Center)
-                    { Bold = true },
-                () => TabPillFill(tab), Transparent),
-            Chip(new TextElement(() => _loc.T(TabLabelKey(tab)), AllTabChipOffText, Align: TextAlign.Center)
-                    { Strikethrough = true },
-                () => TabTrackFill, TabTrackFill));
-    }
-
-    // Opaque blend, not alpha text (same reason as TabMutedText): alpha would composite against the game world behind
-    // the glass window, so its legibility would swing with the scene.
-    private ColorRgba? AllTabChipOffText() => Mix(_services.Theme.Colors.MenuMuted, TabTrackColor(), AllTabChipOffMix);
+    // ⚙ settings: the ALL TAB panel's six channel chips (house ColourChip, channel colour on / muted off) are built in
+    // .Settings.Layout.cs and call ToggleAllTabChannel.
 }

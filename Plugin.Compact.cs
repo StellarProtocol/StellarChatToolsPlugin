@@ -53,16 +53,7 @@ public sealed partial class Plugin
 
     private bool CompactOn() => _compactMessages;
 
-    // ⚙ settings (.Settings.cs): capsule toggle + sibling label, then the one-line muted hint.
-    private HudElement BuildCompactSettings() => new ColumnElement(new HudElement[]
-    {
-        new RowElement(new HudElement[]
-        {
-            new ToggleElement(() => "", CompactOn, SetCompactMessages),
-            new TextElement(() => _loc.T("chat.settings.compact")),
-        }, Gap: 6f),
-        new TextElement(() => _loc.T("chat.settings.compactHint"), MutedCol),
-    }, Gap: 4f);
+    // ⚙ settings: the "Compact messages" row (DISPLAY panel) is in .Settings.Layout.cs; its hint is behind the "?".
 
     // VirtualListElement.RowRevision (.Log.cs): the translate revision with the display mode folded into bit 0, so a mode
     // switch re-measures every row in place and a translate change still re-measures its one row.

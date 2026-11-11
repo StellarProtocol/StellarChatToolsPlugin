@@ -1,3 +1,4 @@
+using System;
 using Stellar.Abstractions.Services;
 using UnityEngine;
 
@@ -72,28 +73,44 @@ public sealed partial class Plugin
 
     private static int Pct(float v) => Mathf.RoundToInt(v * 100f);
 
+    // The "Custom window opacity" help text (Settings DISPLAY "?", .Settings.Layout.cs): while off it names the followed
+    // framework value. Polled while the help popover shows → formatted only when the state, the followed percent or the
+    // language changes.
+    private bool _ohOn;
+    private int _ohPct = int.MinValue;
+    private string? _ohLang;
+    private string _ohText = string.Empty;
+
     private string OpacityHintText()
     {
-        if (_customOpacityOn) return _loc.T("chat.settings.opacityHint");
         var fw = FrameworkOpacity();
-        return fw.HasValue ? _loc.TFormat("chat.settings.opacityHintFollow", Pct(fw.Value)) : _loc.T("chat.settings.opacityHint");
+        int pct = fw.HasValue ? Pct(fw.Value) : -1;
+        var lang = _loc.Language;
+        if (_customOpacityOn == _ohOn && pct == _ohPct && string.Equals(lang, _ohLang, StringComparison.Ordinal))
+            return _ohText;
+        _ohOn = _customOpacityOn; _ohPct = pct; _ohLang = lang;
+        _ohText = _customOpacityOn || pct < 0
+            ? _loc.T("chat.settings.opacityHint")
+            : _loc.TFormat("chat.settings.opacityHintFollow", pct);
+        return _ohText;
     }
 
-    // ⚙ settings (.Settings.cs): capsule toggle + sibling label; when on, label + slider + "{n}%" readout (the framework
-    // ThemesPanel opacity-row idiom); then the muted hint, which names the followed framework value while off.
-    private HudElement BuildOpacitySettings() => new ColumnElement(new HudElement[]
+    // The DISPLAY slider row's text while the override is OFF ("Uses Stellar opacity · 90%", .Settings.Layout.cs) — the
+    // live framework value, so a Theme-settings change shows up here. Polled every refresh → formatted only when the
+    // followed percent or the language changes (no per-poll allocation). No percent if the IChromeStyle cast fails.
+    private int _ofPct = int.MinValue;
+    private string? _ofLang;
+    private string _ofText = string.Empty;
+
+    private string OpacityFollowText()
     {
-        new RowElement(new HudElement[]
-        {
-            new ToggleElement(() => "", () => _customOpacityOn, SetCustomOpacityOn),
-            new TextElement(() => _loc.T("chat.settings.opacity")),
-        }, Gap: 6f),
-        new ConditionalElement(() => _customOpacityOn, new RowElement(new HudElement[]
-        {
-            new TextElement(() => _loc.T("chat.settings.opacityLabel"), Width: 56f),
-            new SliderElement(() => _customOpacity, SetCustomOpacity, OpacityMin, OpacityMax),
-            new TextElement(() => $"{Pct(_customOpacity)}%"),
-        }, Gap: 4f)),
-        new TextElement(OpacityHintText, MutedCol),
-    }, Gap: 4f);
+        var fw = FrameworkOpacity();
+        int pct = fw.HasValue ? Pct(fw.Value) : -1;
+        var lang = _loc.Language;
+        if (pct == _ofPct && string.Equals(lang, _ofLang, StringComparison.Ordinal)) return _ofText;
+        _ofPct = pct; _ofLang = lang;
+        _ofText = pct < 0 ? _loc.T("chat.settings.opacityFollowLineNoPct")
+                          : _loc.TFormat("chat.settings.opacityFollowLine", pct);
+        return _ofText;
+    }
 }

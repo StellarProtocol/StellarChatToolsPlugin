@@ -74,25 +74,7 @@ public sealed partial class Plugin
         return TrLangIndex.ContainsKey(ui) ? ui : "en";
     }
 
-    // ── Settings ⚙ section (.Settings.cs window) ───────────────────────────────────────────────────────────────────
-    private HudElement BuildTranslateSettings() => new ColumnElement(new HudElement[]
-    {
-        new TextElement(() => _loc.T("chat.translate.title"), Emphasis: true),
-        new RowElement(new HudElement[]
-        {
-            new TextElement(() => _loc.T("chat.translate.targetLabel")),
-            // ~52 languages → a capped, scrollable popup (DropdownElement.MaxVisibleRows), not a screen-tall list.
-            // Pill = house-style trigger + list (framework ≥ 2.28.0, same as MultiTool's Band Mute dropdown). The Pill list
-            // is only as wide as its trigger, so a fixed Width keeps long names ("Bahasa Indonesia (…)") from being cut.
-            new DropdownElement(TrTargetIndex, TrTargetOptions, OnPickTrTarget, Width: 220f) { MaxVisibleRows = 12, Style = DropdownStyle.Pill },
-        }, Gap: 6f),
-        new RowElement(new HudElement[]
-        {
-            new ToggleElement(() => "", () => _trHoverButton, v => { _trHoverButton = v; SaveTranslateConfig(); }),
-            new TextElement(() => _loc.T("chat.translate.hoverToggle")),
-        }, Gap: 6f),
-        new TextElement(() => _loc.T("chat.translate.privacy"), MutedCol),
-    }, Gap: 4f);
+    // The Settings rows (target dropdown, hover-button toggle, privacy note behind the "?") are in .Settings.Layout.cs.
 
     // ── Row state lookups (polled per refresh per slot — no allocation) ─────────────────────────────────────────────
     private TrEntry? TrEntryFor(int slot)

@@ -8,7 +8,7 @@ namespace Stellar.ChatTools;
 /// LOCAL-ONLY log lines (approved design "option B"): when a send never left the client (.SendCooldown.cs
 /// <see cref="OnLocalSendFailed"/>) a red notice is shown in the log of the tab the user is looking at — a whisper
 /// conversation included — as one compact line styled like the System notices (.SystemNotice.cs): the time in muted grey,
-/// then the message in red (<see cref="LocalNoticeHex"/>). The draft stays in the composer; no Retry, no Send-pill change.
+/// then the message in the theme's Danger red (<c>IThemeStatusColors.Danger</c>, fw 2.30.0). The draft stays in the composer; no Retry, no Send-pill change.
 ///
 /// These rows exist ONLY in this plugin's filtered view: they never enter the framework chat ring (so they can't evict
 /// real chat), never go through <c>MessageReceived</c> (so nothing records, auto-replies to or unread-counts them),
@@ -19,7 +19,6 @@ namespace Stellar.ChatTools;
 public sealed partial class Plugin
 {
     private const int MaxLocalNotices = 20;
-    private const string LocalNoticeHex = "#FF4D4F";
 
     private readonly List<(ChatMessage Msg, ChatTab Tab, long Peer)> _localNotices = new();
     // Membership by REFERENCE: ChatMessage is a record (value equality), and a local row must never match a real one.
@@ -58,9 +57,10 @@ public sealed partial class Plugin
         }
     }
 
-    // NoticeLine (.SystemNotice.cs) body for a local row: "<time>  <red text>".
-    private static string LocalNoticeLine(ChatMessage m, string mutedHex)
-        => $"<color={mutedHex}>{m.Timestamp.ToLocalTime():HH:mm}</color>  <color={LocalNoticeHex}>{m.Text}</color>";
+    // NoticeLine (.SystemNotice.cs) body for a local row: "<time>  <red text>". Both hexes come pre-formatted from that
+    // method's colour cache (rebuilt only when a theme colour changes), so a refresh never formats a colour.
+    private static string LocalNoticeLine(ChatMessage m, string mutedHex, string dangerHex)
+        => $"<color={mutedHex}>{m.Timestamp.ToLocalTime():HH:mm}</color>  <color={dangerHex}>{m.Text}</color>";
 
     // Logout (.CharacterSwitch.cs): session-only, per character.
     private void ClearLocalNotices()

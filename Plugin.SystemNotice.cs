@@ -25,8 +25,8 @@ public sealed partial class Plugin
     private readonly string?[] _noticeLine = new string?[LogPoolSize];
     // Language label + colours the cache was built with (a change drops it), and their pre-formatted forms.
     private string? _noticeLabel;
-    private ColorRgba _noticeMutedC, _noticeSysC;
-    private string _noticeMutedHex = "#888888", _noticeSysHex = "#FFCC73";
+    private ColorRgba _noticeMutedC, _noticeSysC, _noticeDangerC;
+    private string _noticeMutedHex = "#888888", _noticeSysHex = "#FFCC73", _noticeDangerHex = "#FF4D4F";
 
     private bool IsNoticeRow(int slot) => TryMsg(slot, out var m) && m.Channel == ChatChannel.System;
 
@@ -43,10 +43,12 @@ public sealed partial class Plugin
         var label = _loc.T("chat.tab.system");   // the tab's own name — same word the user sees on the System tab
         var mutedC = _services.Theme.Colors.MenuMuted;
         var sysC = _systemColor.Value;
-        if (!string.Equals(label, _noticeLabel, StringComparison.Ordinal) || !mutedC.Equals(_noticeMutedC) || !sysC.Equals(_noticeSysC))
+        var dangerC = _services.Theme.Colors.Danger;   // fw 2.30.0 theme status colour — the local "not sent" red
+        if (!string.Equals(label, _noticeLabel, StringComparison.Ordinal) || !mutedC.Equals(_noticeMutedC) || !sysC.Equals(_noticeSysC)
+            || !dangerC.Equals(_noticeDangerC))
         {
-            _noticeLabel = label; _noticeMutedC = mutedC; _noticeSysC = sysC;
-            _noticeMutedHex = Hex(mutedC); _noticeSysHex = Hex(sysC);
+            _noticeLabel = label; _noticeMutedC = mutedC; _noticeSysC = sysC; _noticeDangerC = dangerC;
+            _noticeMutedHex = Hex(mutedC); _noticeSysHex = Hex(sysC); _noticeDangerHex = Hex(dangerC);
             Array.Clear(_noticeLine, 0, _noticeLine.Length);
         }
         string muted = _noticeMutedHex, sys = _noticeSysHex;
@@ -55,7 +57,7 @@ public sealed partial class Plugin
         if (IsLocalNotice(m))   // .LocalNotice.cs — local-only line: time + red text, no "System" label
         {
             _noticeKey[slot] = key;
-            return _noticeLine[slot] = LocalNoticeLine(m, muted);
+            return _noticeLine[slot] = LocalNoticeLine(m, muted, _noticeDangerHex);
         }
         var time = m.Timestamp.ToLocalTime().ToString("HH:mm");
         // Client notices keep the game's own colour tags; a SERVER System line (TopNotice / Play, SystemLabel null) is wire
