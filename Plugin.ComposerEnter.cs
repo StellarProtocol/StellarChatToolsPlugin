@@ -65,7 +65,7 @@ public sealed partial class Plugin
     }
 
     // true = leave the input (sent, or nothing to send); false = keep the draft and the focus (a refused send).
-    private bool SendOrLeave() => string.IsNullOrWhiteSpace(_inputText) || DoSend();
+    private bool SendOrLeave() => (string.IsNullOrWhiteSpace(_inputText) && !_posAttached) || DoSend();   // an attached position sends alone
 
     private void OpenEnterPress(bool leave)
     {

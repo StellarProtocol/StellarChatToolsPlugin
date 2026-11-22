@@ -85,8 +85,12 @@ public sealed partial class Plugin
         {
             new ConditionalElement(() => IsDateSepRow(i), BuildDateSepRow(i),
             new ConditionalElement(() => IsNoticeRow(i), MessageRightClickTarget(BuildNoticeRow(i), i),   // right-click = message menu (.MessageMenu.cs)
+            // A loot-roll-style notice on a chat channel (.ShareLinks.Rows.cs) — the notice line look, both modes.
+            new ConditionalElement(() => IsHyperNoticeRow(i), MessageRightClickTarget(BuildHyperNoticeRow(i), i),
             new ConditionalElement(CompactOn, BuildCompactRow(i),
-                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false))))),
+                new ConditionalElement(() => IsSelfRow(i), BuildBubbleRow(i, self: true), BuildBubbleRow(i, self: false)))))),
+            // "Waypoint set — map opened" / "Can't track…" under a clicked position link (.ShareLinks.Rows.cs).
+            new ConditionalElement(() => ShareNoteShown(i), BuildShareNoteRow(i)),
             new SpacerElement(Height: BubbleRowGap),
         });
 
@@ -142,6 +146,8 @@ public sealed partial class Plugin
         // Whole-bubble branches: sticker-image bubble vs wrapping-text bubble. The Cond now sits directly in the Row's
         // HLG where the single bubble used to — identical visuals, only the Cond's depth moved (out of the measured child).
         HudElement bubble = new ConditionalElement(() => IsStickerRow(i), MakeBubble(BuildStickerImage(i)), textBubble);
+        // Position / voice / home shares (.ShareLinks.Rows.cs): more whole-bubble branches, same rule.
+        bubble = WrapShareBubbles(i, body => MakeBubble(body), bubble);
         // Right-click = the message menu (.MessageMenu.cs). A Bare target AROUND the whole-bubble Cond (outside the measured
         // child): no visuals/padding, and nested buttons (name links, translate) still take their own left clicks.
         bubble = MessageRightClickTarget(bubble, i);

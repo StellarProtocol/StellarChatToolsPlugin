@@ -97,6 +97,9 @@ public sealed partial class Plugin
         // Copy the human-readable text the row shows: wire text as sanitized for display (ChatMarkup — <sprite=N> kept, it
         // round-trips into chat as the emoji), a client notice minus the game's colour tags.
         var raw = m.Channel == ChatChannel.System && !string.IsNullOrEmpty(m.SystemLabel) ? m.SystemLabel + " " + m.Text : m.Text;
+        // A share copies what the row shows (.ShareLinks.cs): the laid-out text, or a voice message's transcript.
+        if (m.Hypertext is { Segments.Count: > 0 } ht) raw = ht.PlainText;
+        else if (m.Voice is { } vo) raw = vo.Transcript;
         _msgMenuText = _msgMenuSticker ? "" : StripRichTags(m.SystemLabel != null ? raw ?? "" : ChatMarkup.SanitizeWire(raw));
         _msgCopiedUntil = double.NegativeInfinity;
         _msgMenuOpen = true;

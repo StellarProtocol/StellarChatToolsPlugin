@@ -112,12 +112,14 @@ public sealed partial class Plugin
     private ColorRgba? MutedCol() => _services.Theme.Colors.MenuMuted;
 
     // A message we cannot render: a non-text payload type (hyperlink/notice/voice/picture) that carries no
-    // readable text and no sticker. The framework probe discards chat_hypertext/multi_lang_notice/voice, so these
-    // leak an empty or punctuation-only msg_text fragment (e.g. a lone "(") with a blank sender + id 0. Hide them.
-    // See Chat-System-Architecture.md §3-4 (known, pre-existing framework decode limitation — we only hide here).
+    // readable text and no sticker. Before framework 2.35 the probe discarded chat_hypertext/voice, so these leaked an
+    // empty or punctuation-only msg_text fragment (e.g. a lone "(") with a blank sender + id 0. A share / notice with laid
+    // out segments or a voice message is now drawn from its own payload (.ShareLinks.cs) and kept; one the framework could
+    // not lay out (no segments) still falls back to its text and is hidden when that is junk. Chat-Hypertext-Links.md.
     private static bool IsUnrenderable(in ChatMessage m)
     {
         if (m.StickerId != 0) return false;                  // whole-message sticker = renderable (StickerId surfaced)
+        if (HasShareContent(m)) return false;                // .ShareLinks.cs — hypertext segments / voice
         if (m.Type == ChatMessageType.Regular) return false; // real player text: never hide (even one char / punctuation)
         // Non-Regular types (System / ItemLink / Emote / Unknown): hide only when there is no readable glyph left.
         return !HasReadableText(m.Text);
@@ -295,7 +297,9 @@ public sealed partial class Plugin
 
     // Bubble body, TMP-safe (ChatMarkup: only <sprite=N> survives from the wire). Polled every refresh, so the sanitized
     // string is cached per pool slot and recomputed only when the slot shows a different text (same-instance check).
-    private string LogText(int slot) => TryMsg(slot, out var m) ? SafeCached(_bodyRaw, _bodySafe, slot, m.Text, m.SystemLabel != null) : "";
+    // A share (.ShareLinks.cs) shows its pre-composed rich text (styled links) instead of the wire text.
+    private string LogText(int slot)
+        => !TryMsg(slot, out var m) ? "" : ShareBodyOr(slot) ?? SafeCached(_bodyRaw, _bodySafe, slot, m.Text, m.SystemLabel != null);
 
     private readonly string?[] _bodyRaw = new string?[LogPoolSize], _bodySafe = new string?[LogPoolSize];
 

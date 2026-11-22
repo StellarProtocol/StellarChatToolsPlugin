@@ -57,6 +57,31 @@ internal static class ChatMarkup
         return sb.ToString();
     }
 
+    /// <summary>Already-sanitised text (a framework hypertext segment, a voice transcript) → safe to CONCATENATE with our
+    /// own tags. A sanitised string may still hold a lone <c>&lt;</c> (no <c>&gt;</c> after it, e.g. "&lt;3"): harmless on its
+    /// own, but next to a tag we append ("&lt;3&lt;color=…&gt;") TMP would read it as the start of one. So every <c>&lt;</c>
+    /// that doesn't open a <c>&lt;sprite=N&gt;</c> is wrapped in <c>&lt;noparse&gt;</c>; sprite tags stay pictures. Same
+    /// instance when there is no <c>&lt;</c> (no allocation); line breaks / backslashes are neutralised like SanitizeWire.</summary>
+    public static string EscapeForRich(string? s)
+    {
+        s = SanitizeWire(s);
+        if (s.IndexOf('<') < 0) return s;
+        var sb = new StringBuilder(s.Length + 16);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '<')
+            {
+                int close = s.IndexOf('>', i + 1);
+                if (close > i + 1 && IsSpriteTag(s, i, close)) { sb.Append(s, i, close - i + 1); i = close; continue; }
+                sb.Append("<noparse><</noparse>");
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
     // Exactly "<sprite=" + one or more ASCII digits + ">" (the game's Lua pattern "<sprite=%d+>", case-sensitive like it).
     private static bool IsSpriteTag(string s, int open, int close)
     {
