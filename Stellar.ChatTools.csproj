@@ -7,18 +7,18 @@
     <NoWarn>CS8632;CS8765</NoWarn>
     <RootNamespace>Stellar.ChatTools</RootNamespace>
     <AssemblyName>Stellar.ChatTools</AssemblyName>
-    <Version>3.3.0</Version>
+    <Version>3.4.0</Version>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Released plugin SDK 2.27.1 (nuget.org): carries ILocalization, StickerInfo and BubbleElement (2.26.0), the
-         2.27.0 runtime fixes (sticky cursor, caret, scroll anchor, press shield) and the 2.27.1 fixes (whisper-list
-         ellipsis on scroll, Auto Combo while the composer is focused), so no local framework build is needed.
-         All three pinned together so no older transitive Abstractions can shadow it. -->
-    <PackageReference Include="Stellar.Abstractions"       Version="2.30.0" />
-    <PackageReference Include="Stellar.PluginContracts"    Version="2.30.0" />
-    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.30.0" />
+    <!-- Plugin SDK 2.35.0 (chat share links: ChatMessage.Hypertext / .Voice, IChatPositionShare). Pinned to the LOCAL
+         pre-release 2.35.0-local.chatshare.1 (Mod\local-nuget-feed; build with
+         -p:RestoreAdditionalProjectSources=<that folder>) until framework 2.35.0 is released — then switch all three to
+         2.35.0 from nuget.org. All three pinned together so no older transitive Abstractions can shadow it. -->
+    <PackageReference Include="Stellar.Abstractions"       Version="2.35.0" />
+    <PackageReference Include="Stellar.PluginContracts"    Version="2.35.0" />
+    <PackageReference Include="Stellar.Plugin.InteropRefs" Version="2.35.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- i18n catalogs: auto-discovered by the framework via the Lang.<code>.json suffix. -->
@@ -41,6 +41,11 @@
     <EmbeddedResource Include="Assets/chevron_dark.png" LogicalName="Stellar.ChatTools.Assets.chevron_dark.png" />
     <!-- Whisper online dot (32x32 green, shown at 7 px) for the conversation list + header (Plugin.WhisperList.cs). -->
     <EmbeddedResource Include="Assets/online_dot.png" LogicalName="Stellar.ChatTools.Assets.online_dot.png" />
+    <!-- Share-link glyphs (white, tinted live via ImageElement.Tint): the map pin pre-drawn at 12 px (links, the attachment
+         strip) and 14 px (the composer's share button), the mic at 12 px (voice messages) - tools/make-link-icons.py. -->
+    <EmbeddedResource Include="Assets/link_pin_12.png" LogicalName="Stellar.ChatTools.Assets.link_pin_12.png" />
+    <EmbeddedResource Include="Assets/link_pin_14.png" LogicalName="Stellar.ChatTools.Assets.link_pin_14.png" />
+    <EmbeddedResource Include="Assets/link_mic_12.png" LogicalName="Stellar.ChatTools.Assets.link_mic_12.png" />
     <!-- Stellar menu (launcher) tile icon, 128x128 RGBA, read once via GetManifestResourceStream (Plugin.cs). -->
     <EmbeddedResource Include="Resources/chattools-icon.png" LogicalName="Stellar.ChatTools.Resources.chattools-icon.png" />
     <!-- Settings header glyph: the same two bubbles PRE-DRAWN at the 24 px it is shown (tools/make-settings-icon.py,

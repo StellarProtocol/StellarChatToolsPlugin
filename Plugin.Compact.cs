@@ -57,7 +57,9 @@ public sealed partial class Plugin
 
     // VirtualListElement.RowRevision (.Log.cs): the translate revision with the display mode folded into bit 0, so a mode
     // switch re-measures every row in place and a translate change still re-measures its one row.
-    private long LogRowRevision(int dataIndex) => (TranslateRowRevision(dataIndex) << 1) | (_compactMessages ? 1L : 0L);
+    // A position link's click note (.ShareLinks.Rows.cs) is folded in the same way: it adds a line under its row.
+    private long LogRowRevision(int dataIndex)
+        => ((TranslateRowRevision(dataIndex) * 2L + ShareNoteRevision(dataIndex)) << 1) | (_compactMessages ? 1L : 0L);
 
     // ── Row ────────────────────────────────────────────────────────────────────────────────────────────────────────
     // Right-click anywhere on the line = the message menu (.MessageMenu.cs), same Bare target as a bubble / notice. The
@@ -67,12 +69,13 @@ public sealed partial class Plugin
     // selectables inside it keep their own hover + click; the right-click target around it still opens the menu.
     private HudElement BuildCompactRow(int i) => MessageRightClickTarget(new ConditionalElement(() => IsStickerRow(i),
         new RowElement(new HudElement[] { BuildCompactHead(i, top: false), BuildStickerImage(i, CompactStickerSize), new SpacerElement() }, Gap: CompactGap),
-        new RowElement(new HudElement[]
+        // Position / voice shares get their own whole-row branches (.ShareLinks.Rows.cs); everything else is the text line.
+        WrapCompactShare(i, new RowElement(new HudElement[]
         {
             BuildCompactHead(i, top: true),
             new CellElement(BuildCompactBody(i), Weight: 1f),
             BuildCompactTrSlot(i),
-        }, Gap: CompactGap) { OnHover = on => OnTrHover(i, on) }), i);
+        }, Gap: CompactGap) { OnHover = on => OnTrHover(i, on) })), i);
 
     // Body column: the line text, then — only while a translate state is live — the bubble's own status line
     // ("文A Translated from Thai to English" / "Translating…" / "Translation failed · click to retry", .Bubbles.cs). It sits

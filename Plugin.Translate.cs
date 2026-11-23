@@ -91,7 +91,7 @@ public sealed partial class Plugin
     // is only emoji has nothing to translate). Stickers / system notices / own messages never get the pill — the pill
     // only exists in the others' text layout (.Bubbles.cs), this guards the rest.
     private static bool CanTranslate(in ChatMessage m)
-        => m.StickerId == 0 && m.Channel != ChatChannel.System && HasReadableTextOutsideTags(m.Text);
+        => m.StickerId == 0 && m.Channel != ChatChannel.System && !HasShareContent(m) && HasReadableTextOutsideTags(m.Text);   // shares: .ShareLinks.cs
 
     private static bool HasReadableTextOutsideTags(string? s)
     {

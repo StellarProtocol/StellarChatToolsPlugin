@@ -113,11 +113,13 @@ public sealed partial class Plugin
         if (r.Ok)
         {
             if (_sentDraft != null && r.Channel == _sentDraftChannel) _sentDraft = null;
+            if (r.IsPositionShare) _sentPosShare = false;
             return;
         }
         _refusedUntil = _services.Framework.TimeNow + RefusedFlashSec;
         _refusedTooFast = r.ErrorCode == ChatSendResult.ErrorTooFrequent;
         RestoreSentDraft(r.Channel);
+        if (r.IsPositionShare) OnPositionShareRefused();   // .ShareLinks.Compose.cs — the link comes back with the draft
     }
 
     // Put the optimistically-cleared draft back — unless the user has already started typing a new one.
@@ -172,8 +174,9 @@ public sealed partial class Plugin
     // The Send pill is live only with something to send, a resolvable target and no cooldown / pending reply.
     // Allocation-free (polled every refresh). Also off while the draft is being translated or is over the 140 cap (a long
     // translation is kept whole, .TranslateOut.cs — the user trims it first).
+    // An attached position (.ShareLinks.Compose.cs) can go out with an empty box (the link alone).
     private bool CanSendNow()
-        => !string.IsNullOrWhiteSpace(_inputText) && _inputText.Length <= MaxMessageLength && !TrOutBusy()
+        => (_posAttached || !string.IsNullOrWhiteSpace(_inputText)) && _inputText.Length <= MaxMessageLength && !TrOutBusy()
            && HasSendTarget() && !CoolingDown();
 
     private string SendLabel()

@@ -7,7 +7,7 @@ namespace Stellar.ChatTools;
 
 /// <summary>
 /// The send composer: ONE row of equal-height (28) controls — a channel-coloured target chip (.SendTarget.cs), ＋ (quick
-/// phrases), ☺ (stickers/emoji), the text field (placeholder follows the target), a counter shown only near the 140 cap,
+/// phrases), ☺ (stickers/emoji), the share-my-position pin (.ShareLinks.Compose.cs), the text field (placeholder follows the target), a counter shown only near the 140 cap,
 /// and a channel-coloured Send that greys out while empty or cooling down (.SendCooldown.cs). Settings live in their own
 /// window behind the title-bar gear (.Settings.cs). The target defaults to the active read-tab's channel but is overridable. Whisper is per
 /// PERSON: target 4 whispers the conversation selected in the Whisper tab (.Whisper.cs) — in that tab the chip is a
@@ -67,6 +67,8 @@ public sealed partial class Plugin
             // Outgoing-translate status ("Translating to Thai…" / "文A Translated to Thai · Undo" / failed), shown only
             // while a state is live (.TranslateOut.cs) — it takes one line from the log above while visible.
             BuildTrOutStatus(),
+            // The attached position (.ShareLinks.Compose.cs): pin + position text + ✕, shown only while attached.
+            new ConditionalElement(() => _posAttached, BuildPosStrip()),
             // ONE composer row: [target chip ▾] [＋] [☺] [文A] [text field …] [n/140 near the cap] [Send]. Every control is
             // a 28-tall pill (.SendTarget.cs BuildPill) = the field's own 28 box, and the Row centres them vertically.
             // The field sits in a weighted cell so the dark rounded input takes all the row's leftover width.
@@ -85,6 +87,8 @@ public sealed partial class Plugin
                 // CenterGlyphs: centre the drawn sprite, not the baseline-anchored line box (see BuildEmojiTabIcon).
                 BuildIconPill(new TextElement(() => EmojiTags[0], FontSize: ComposerEmojiFontSize, Align: TextAlign.Center, NoWrap: true) { RichEmoji = true, CenterGlyphs = true },
                     () => ToolPillFill(_stickerOpen), ToggleStickerPicker),
+                // Share my position (.ShareLinks.Compose.cs): attaches the current position; recessed where the map forbids it.
+                BuildPinButton(),
                 // Translate-my-draft 文A (.TranslateOut.cs): click = language menu; busy / done / failed states.
                 BuildTrOutButton(),
                 // Locked: dimmed + read-only while the draft is being translated (the result replaces the text).
@@ -167,6 +171,7 @@ public sealed partial class Plugin
     // True only when the draft actually went out (Enter then leaves the input; a refusal keeps the focus for a retry).
     private bool DoSend()
     {
+        if (_posAttached) return DoSharePosition();   // .ShareLinks.Compose.cs — the typed text goes in front of the link
         if (string.IsNullOrWhiteSpace(_inputText)) return false;
         if (TrOutBusy() || _inputText.Length > MaxMessageLength) return false;   // .TranslateOut.cs — translating / over the cap
         if (CoolingDown()) return false;           // .SendCooldown.cs

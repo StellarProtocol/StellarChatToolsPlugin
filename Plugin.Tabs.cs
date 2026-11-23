@@ -81,7 +81,9 @@ public sealed partial class Plugin
         // Every SHOWN text body — login history included (the history batches are the login freeze) — is handed to the
         // framework's TMP glyph prewarm NOW, so its missing glyphs rasterize a few per frame before the row is first
         // laid out, instead of all inside one window apply. Sticker rows draw no text body. Best-effort hint only.
-        if (msg.StickerId == 0 && !string.IsNullOrEmpty(msg.Text)) _services.Windows.PrewarmText(ChatMarkup.SafeBody(msg));   // the text the row will draw
+        if (msg.StickerId == 0 && msg.Hypertext is { PlainText.Length: > 0 } ht) _services.Windows.PrewarmText(ht.PlainText);   // a share's text (.ShareLinks.cs)
+        else if (msg.Voice is { Transcript.Length: > 0 } vo) _services.Windows.PrewarmText(vo.Transcript);
+        else if (msg.StickerId == 0 && !string.IsNullOrEmpty(msg.Text)) _services.Windows.PrewarmText(ChatMarkup.SafeBody(msg));   // the text the row will draw
         if (msg.IsHistory) return;
         NoteNewBelow(msg);   // .NewBelow.cs — counts it for the "↓ N new messages" bar if scrolled up + in the active tab
         long seq = ++_arrivalSeq;
